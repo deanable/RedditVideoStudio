@@ -1,54 +1,24 @@
-﻿using RedditVideoStudio.Infrastructure.Services; // Required for WindowsTextToSpeechService
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using RedditVideoStudio.Shared.Configuration;
-using System.Collections.ObjectModel; // Required for ObservableCollection
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
+using RedditVideoStudio.UI.ViewModels.Settings;
+using System.Collections.Generic;
 
 namespace RedditVideoStudio.UI.ViewModels
 {
-    /// <summary>
-    /// The ViewModel for the Settings window. It holds a copy of the application's
-    /// settings, allowing users to edit them in the UI. Changes are only applied
-    /// back to the main configuration when the user saves them.
-    /// </summary>
-    public class SettingsViewModel : INotifyPropertyChanged
+    public partial class SettingsViewModel : ObservableObject
     {
+        [ObservableProperty]
         private AppSettings _settings;
-        public AppSettings Settings
-        {
-            get => _settings;
-            set
-            {
-                _settings = value;
-                OnPropertyChanged();
-            }
-        }
 
-        /// <summary>
-        /// A collection of available Windows TTS voice names to be displayed in the UI.
-        /// This is populated by the WindowsTextToSpeechService.
-        /// </summary>
-        public ObservableCollection<string> Voices { get; set; }
+        public DestinationsSettingsViewModel Destinations { get; }
 
-        /// <summary>
-        /// Initializes a new instance of the SettingsViewModel.
-        /// </summary>
-        /// <param name="windowsTtsService">The Windows TTS service, injected by the DI container.</param>
-        public SettingsViewModel(WindowsTextToSpeechService windowsTtsService)
+        public List<string> Voices { get; set; } = new List<string>();
+
+        public SettingsViewModel(DestinationsSettingsViewModel destinationsViewModel)
         {
-            // Initialize with default settings to avoid null reference issues.
+            // The source generator will create the public 'Settings' property from the private '_settings' field.
             _settings = new AppSettings();
-
-            // Get the list of installed voices from the service and populate the collection
-            // that the settings window's ComboBox will bind to.
-            Voices = new ObservableCollection<string>(windowsTtsService.GetVoices());
-        }
-
-        public event PropertyChangedEventHandler? PropertyChanged;
-
-        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            Destinations = destinationsViewModel;
         }
     }
 }

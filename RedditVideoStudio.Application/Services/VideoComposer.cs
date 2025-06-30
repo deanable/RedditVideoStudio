@@ -1,4 +1,4 @@
-﻿// C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Application\Services\VideoComposer.cs
+﻿// In: C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Application\Services\VideoComposer.cs
 
 using Microsoft.Extensions.Logging;
 using RedditVideoStudio.Core.Exceptions;
@@ -15,11 +15,6 @@ using System.Threading.Tasks;
 
 namespace RedditVideoStudio.Application.Services
 {
-    /// <summary>
-    /// Implements the IVideoComposer interface, acting as the main orchestrator for the video creation process.
-    /// It coordinates various services to fetch content, generate storyboards, render video segments,
-    /// and combine them into a final video.
-    /// </summary>
     public class VideoComposer : IVideoComposer
     {
         private readonly ILogger<VideoComposer> _logger;
@@ -90,52 +85,51 @@ namespace RedditVideoStudio.Application.Services
             {
                 try
                 {
-                    // --- Intro Clip ---
-                    if (!string.IsNullOrEmpty(clipSettings.IntroPath) && File.Exists(clipSettings.IntroPath))
+                    if (!string.IsNullOrEmpty(clipSettings.IntroPath) && File.Exists(clipSettings.IntroPath) && clipSettings.IntroDuration > 0)
                     {
                         var introPath = await ProcessStaticClip(clipSettings.IntroPath, clipSettings.IntroDuration, "intro", tempDirectory.Path, cancellationToken);
                         videoSegments.Add(introPath);
                     }
 
-                    // --- Title Segment ---
+                    // Generate Title Segment
                     var titleStoryboard = await _storyboardGenerator.GenerateAsync(new[] { title }, tempDirectory.Path, "Title", progress, cancellationToken);
                     var titleSegmentPath = await _videoSegmentGenerator.GenerateAsync(titleStoryboard, "abstract", tempDirectory.Path, "Title", Path.Combine(tempDirectory.Path, "title_clip.mp4"), progress, cancellationToken);
                     videoSegments.Add(titleSegmentPath);
 
-                    // --- Process the break clip once before the loop ---
+                    // Process Break Clip
                     string? breakClipPath = null;
-                    if (!string.IsNullOrEmpty(clipSettings.BreakClipPath) && File.Exists(clipSettings.BreakClipPath))
+                    if (!string.IsNullOrEmpty(clipSettings.BreakClipPath) && File.Exists(clipSettings.BreakClipPath) && clipSettings.BreakClipDuration > 0)
                     {
                         breakClipPath = await ProcessStaticClip(clipSettings.BreakClipPath, clipSettings.BreakClipDuration, "break", tempDirectory.Path, cancellationToken);
                     }
 
-                    // --- Process Comments and Separators ---
+                    // Generate Comment Segments
                     if (comments.Any())
                     {
                         for (int i = 0; i < comments.Count; i++)
                         {
                             cancellationToken.ThrowIfCancellationRequested();
 
-                            // Add the pre-processed separator clip before each comment
                             if (!string.IsNullOrEmpty(breakClipPath))
                             {
                                 videoSegments.Add(breakClipPath);
                                 _logger.LogInformation("Added break clip for comment {CommentNumber}", i + 1);
                             }
 
-                            // Generate segment for the current comment
                             var comment = comments[i];
                             var commentSegmentName = $"Comment_{i + 1}";
                             _logger.LogInformation("Generating video segment for {SegmentName}", commentSegmentName);
 
+                            // --- FINAL CORRECTION ---
+                            // Ensure each comment starts with a completely new storyboard to prevent state bleed-over.
                             var commentStoryboard = await _storyboardGenerator.GenerateAsync(new[] { comment }, tempDirectory.Path, commentSegmentName, progress, cancellationToken);
                             var commentSegmentPath = await _videoSegmentGenerator.GenerateAsync(commentStoryboard, "nature", tempDirectory.Path, commentSegmentName, Path.Combine(tempDirectory.Path, $"{commentSegmentName}_clip.mp4"), progress, cancellationToken);
                             videoSegments.Add(commentSegmentPath);
+                            // --- END OF FINAL CORRECTION ---
                         }
                     }
 
-                    // --- Outro Clip ---
-                    if (!string.IsNullOrEmpty(clipSettings.OutroPath) && File.Exists(clipSettings.OutroPath))
+                    if (!string.IsNullOrEmpty(clipSettings.OutroPath) && File.Exists(clipSettings.OutroPath) && clipSettings.OutroDuration > 0)
                     {
                         var outroPath = await ProcessStaticClip(clipSettings.OutroPath, clipSettings.OutroDuration, "outro", tempDirectory.Path, cancellationToken);
                         videoSegments.Add(outroPath);
@@ -155,27 +149,18 @@ namespace RedditVideoStudio.Application.Services
             }
         }
 
-        /// <summary>
-        /// Helper method to process static clips (intro, outro, break).
-        /// It ensures the clip is trimmed and normalized to project standards.
-        /// This is crucial for preventing concatenation errors in FFmpeg.
-        /// </summary>
         private async Task<string> ProcessStaticClip(string clipPath, double duration, string clipName, string tempPath, CancellationToken cancellationToken)
         {
             var tempClipPath = clipPath;
 
-            // 1. Trim the clip if a duration is specified. This creates a temporary trimmed clip.
             if (duration > 0)
             {
                 var trimmedPath = Path.Combine(tempPath, $"{clipName}_trimmed.mp4");
                 tempClipPath = await _ffmpegService.TrimVideoAsync(clipPath, TimeSpan.FromSeconds(duration), trimmedPath, cancellationToken);
             }
 
-            // 2. Normalize the (potentially trimmed) clip to ensure it has the correct encoding, resolution,
-            // pixel format, and an audio track for concatenation.
             var finalClipPath = Path.Combine(tempPath, $"{clipName}_final.mp4");
             await _ffmpegService.NormalizeVideoAsync(tempClipPath, finalClipPath, cancellationToken);
-
             return finalClipPath;
         }
     }

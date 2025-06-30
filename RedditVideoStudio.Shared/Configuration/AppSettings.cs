@@ -1,9 +1,8 @@
-﻿namespace RedditVideoStudio.Shared.Configuration
+﻿// C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Shared\Configuration\AppSettings.cs
+namespace RedditVideoStudio.Shared.Configuration
 {
     /// <summary>
     /// A container for all application settings, organized by feature area.
-    /// This class provides a centralized and strongly-typed way to access
-    /// configuration values throughout the application.
     /// </summary>
     public class AppSettings
     {
@@ -16,6 +15,9 @@
         public GoogleCloudSettings GoogleCloud { get; set; } = new();
         public ClipSettings ClipSettings { get; set; } = new();
         public AzureTtsSettings AzureTts { get; set; } = new();
-        public ElevenLabsSettings ElevenLabs { get; set; } = new(); // Added
+        public ElevenLabsSettings ElevenLabs { get; set; } = new();
+
+        // New property for TikTok settings
+        public TikTokSettings TikTok { get; set; } = new();
     }
 }

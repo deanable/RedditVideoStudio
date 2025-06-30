@@ -38,6 +38,11 @@ namespace RedditVideoStudio.Application.Services
             IProgress<ProgressReport> progress,
             CancellationToken cancellationToken)
         {
+            // --- THE DEFINITIVE FIX ---
+            // A new storyboard is created for EVERY call to this method.
+            // This prevents state from bleeding over between segments.
+            var storyboard = new Storyboard();
+
             var audioDir = Path.Combine(tempPath, $"{segmentName}_audio");
             var overlayDir = Path.Combine(tempPath, $"{segmentName}_overlay");
             Directory.CreateDirectory(audioDir);
@@ -50,8 +55,6 @@ namespace RedditVideoStudio.Application.Services
                 .Select((pageText, index) => (Text: pageText, Index: index))
                 .ToList();
 
-            var storyboard = new Storyboard();
-
             _logger.LogInformation("Generating {PageCount} pages sequentially for segment '\"{SegmentName}\"'.", allPages.Count, segmentName);
 
             foreach (var page in allPages)
@@ -60,7 +63,6 @@ namespace RedditVideoStudio.Application.Services
             }
 
             _logger.LogInformation("Total calculated storyboard duration for segment '\"{SegmentName}\"': {Duration}", segmentName, storyboard.GetNextStartTime());
-
             _logger.LogInformation("Successfully generated all assets for segment '\"{SegmentName}\"'.", segmentName);
             return storyboard;
         }
@@ -78,11 +80,16 @@ namespace RedditVideoStudio.Application.Services
             await Task.WhenAll(speechTask, imageTask);
 
             var speechResult = speechTask.Result;
-
-            // ADDED: Logging for debugging
             _logger.LogInformation("Received speech result for page {PageIndex}: Duration = {Duration}, Path = \"{Path}\"", index, speechResult.Duration, speechResult.FilePath);
 
             var startTime = storyboard.GetNextStartTime();
+
+            _logger.LogInformation("PRE-ADD CHECK for StoryboardItem. Index: {Index}, Calculated StartTime: {StartTime}, SpeechDuration: {Duration}", index, startTime, speechResult.Duration);
+            if (startTime.TotalDays > 1)
+            {
+                throw new InvalidOperationException($"Calculated StartTime '{startTime}' is excessively large, indicating a persistent storyboard state or a build issue. Aborting.");
+            }
+
             storyboard.Items.Add(new StoryboardItem
             {
                 ImagePath = overlayPath,

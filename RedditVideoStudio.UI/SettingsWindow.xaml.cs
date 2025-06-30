@@ -1,121 +1,121 @@
 ﻿using Microsoft.Win32;
-using RedditVideoStudio.Core.Interfaces;
-using RedditVideoStudio.Shared.Configuration;
+using RedditVideoStudio.Core.Interfaces; // Using Core for interfaces, as you correctly pointed out
 using RedditVideoStudio.UI.ViewModels;
-using System.Text.Json;
+using System;
 using System.Windows;
 
 namespace RedditVideoStudio.UI
 {
     /// <summary>
-    /// Interaction logic for the SettingsWindow.xaml.
-    /// This window provides a user interface for editing the application's settings.
+    /// The code-behind for the SettingsWindow.
+    /// Its responsibility is to interact with services to load and save settings.
     /// </summary>
     public partial class SettingsWindow : Window
     {
         private readonly SettingsViewModel _viewModel;
-        private readonly IAppConfiguration _configService;
+        private readonly ISettingsService _settingsService;
+        private readonly IFfmpegService _ffmpegService;
 
-        public SettingsWindow(SettingsViewModel viewModel, IAppConfiguration configService)
+        /// <summary>
+        /// The constructor receives all necessary services via dependency injection.
+        /// The DI container in App.xaml.cs knows how to create and provide these.
+        /// </summary>
+        public SettingsWindow(SettingsViewModel viewModel, ISettingsService settingsService, IFfmpegService ffmpegService)
         {
             InitializeComponent();
+
             _viewModel = viewModel;
-            _configService = configService;
+            _settingsService = settingsService;
+            _ffmpegService = ffmpegService;
 
-            // Create a deep copy of the settings object for editing. This prevents changes
-            // from being applied if the user cancels the dialog.
-            var settingsAsJson = JsonSerializer.Serialize(_configService.Settings);
-            _viewModel.Settings = JsonSerializer.Deserialize<AppSettings>(settingsAsJson) ?? new AppSettings();
+            // Load a fresh, editable copy of the settings into the ViewModel.
+            _viewModel.Settings = _settingsService.GetSettings();
 
+            // Set the DataContext for the entire window to our ViewModel.
+            // This allows the XAML to bind to properties like 'Settings' and 'Destinations'.
             DataContext = _viewModel;
         }
 
+        /// <summary>
+        /// When the user clicks "Save and Close", we use the SettingsService
+        /// to persist the changes from the ViewModel.
+        /// </summary>
         private void SaveAndClose_Click(object sender, RoutedEventArgs e)
         {
-            // If a duration slider is set to 0, clear the associated clip path as this implies the clip is disabled.
-            if (_viewModel.Settings.ClipSettings.IntroDuration == 0)
-            {
-                _viewModel.Settings.ClipSettings.IntroPath = string.Empty;
-            }
-            if (_viewModel.Settings.ClipSettings.BreakClipDuration == 0)
-            {
-                _viewModel.Settings.ClipSettings.BreakClipPath = string.Empty;
-            }
-            if (_viewModel.Settings.ClipSettings.OutroDuration == 0)
-            {
-                _viewModel.Settings.ClipSettings.OutroPath = string.Empty;
-            }
-
-            // Apply the edited settings back to the main configuration service instance.
-            _configService.Settings.Reddit = _viewModel.Settings.Reddit;
-            _configService.Settings.Pexels = _viewModel.Settings.Pexels;
-            _configService.Settings.Tts = _viewModel.Settings.Tts;
-            _configService.Settings.Ffmpeg = _viewModel.Settings.Ffmpeg;
-            _configService.Settings.YouTube = _viewModel.Settings.YouTube;
-            _configService.Settings.ImageGeneration = _viewModel.Settings.ImageGeneration;
-            _configService.Settings.GoogleCloud = _viewModel.Settings.GoogleCloud;
-            _configService.Settings.ClipSettings = _viewModel.Settings.ClipSettings;
-            _configService.Settings.AzureTts = _viewModel.Settings.AzureTts;
-            _configService.Settings.ElevenLabs = _viewModel.Settings.ElevenLabs;
-
+            _settingsService.SaveSettings(_viewModel.Settings);
             DialogResult = true;
             Close();
         }
 
-        private void GoogleKeyHyperlink_Click(object sender, RoutedEventArgs e)
+        // The methods below handle opening a file dialog for the user to select video clips.
+        private async void IntroHyperlink_Click(object sender, RoutedEventArgs e)
         {
-            var openFileDialog = new OpenFileDialog
+            var path = ShowVideoFileDialog("Select Intro Video");
+            if (!string.IsNullOrEmpty(path))
             {
-                Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
-                Title = "Select Google Service Account Key"
-            };
-
-            if (openFileDialog.ShowDialog() == true)
-            {
-                _viewModel.Settings.GoogleCloud.ServiceAccountKeyPath = openFileDialog.FileName;
+                try
+                {
+                    var duration = await _ffmpegService.GetVideoDurationAsync(path);
+                    IntroDurationSlider.Maximum = duration.TotalSeconds;
+                    _viewModel.Settings.ClipSettings.IntroPath = path;
+                    _viewModel.Settings.ClipSettings.IntroDuration = duration.TotalSeconds / 2;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Could not read video duration: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
         }
 
-        private void IntroHyperlink_Click(object sender, RoutedEventArgs e)
+        private async void BreakHyperlink_Click(object sender, RoutedEventArgs e)
+        {
+            var path = ShowVideoFileDialog("Select Break Video");
+            if (!string.IsNullOrEmpty(path))
+            {
+                try
+                {
+                    var duration = await _ffmpegService.GetVideoDurationAsync(path);
+                    BreakDurationSlider.Maximum = duration.TotalSeconds;
+                    _viewModel.Settings.ClipSettings.BreakClipPath = path;
+                    _viewModel.Settings.ClipSettings.BreakClipDuration = duration.TotalSeconds / 2;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Could not read video duration: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private async void OutroHyperlink_Click(object sender, RoutedEventArgs e)
+        {
+            var path = ShowVideoFileDialog("Select Outro Video");
+            if (!string.IsNullOrEmpty(path))
+            {
+                try
+                {
+                    var duration = await _ffmpegService.GetVideoDurationAsync(path);
+                    OutroDurationSlider.Maximum = duration.TotalSeconds;
+                    _viewModel.Settings.ClipSettings.OutroPath = path;
+                    _viewModel.Settings.ClipSettings.OutroDuration = duration.TotalSeconds / 2;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Could not read video duration: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Helper method to show an OpenFileDialog for video files.
+        /// </summary>
+        private string ShowVideoFileDialog(string title)
         {
             var openFileDialog = new OpenFileDialog
             {
                 Filter = "Video files (*.mp4;*.mov)|*.mp4;*.mov|All files (*.*)|*.*",
-                Title = "Select Intro Video"
+                Title = title
             };
-
-            if (openFileDialog.ShowDialog() == true)
-            {
-                _viewModel.Settings.ClipSettings.IntroPath = openFileDialog.FileName;
-            }
-        }
-
-        private void BreakHyperlink_Click(object sender, RoutedEventArgs e)
-        {
-            var openFileDialog = new OpenFileDialog
-            {
-                Filter = "Video files (*.mp4;*.mov)|*.mp4;*.mov|All files (*.*)|*.*",
-                Title = "Select Break Video"
-            };
-
-            if (openFileDialog.ShowDialog() == true)
-            {
-                _viewModel.Settings.ClipSettings.BreakClipPath = openFileDialog.FileName;
-            }
-        }
-
-        private void OutroHyperlink_Click(object sender, RoutedEventArgs e)
-        {
-            var openFileDialog = new OpenFileDialog
-            {
-                Filter = "Video files (*.mp4;*.mov)|*.mp4;*.mov|All files (*.*)|*.*",
-                Title = "Select Outro Video"
-            };
-
-            if (openFileDialog.ShowDialog() == true)
-            {
-                _viewModel.Settings.ClipSettings.OutroPath = openFileDialog.FileName;
-            }
+            return openFileDialog.ShowDialog() == true ? openFileDialog.FileName : string.Empty;
         }
     }
 }

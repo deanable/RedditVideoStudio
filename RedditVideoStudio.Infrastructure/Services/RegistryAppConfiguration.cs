@@ -8,6 +8,7 @@ using System;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text.Json; // This 'using' statement is required.
 
 namespace RedditVideoStudio.Infrastructure.Services
 {
@@ -31,37 +32,48 @@ namespace RedditVideoStudio.Infrastructure.Services
             _logger.LogInformation("Configuration reloaded from registry.");
         }
 
+        /// <summary>
+        /// This is the synchronous Save method required by the IAppConfiguration interface.
+        /// Its logic is copied from your existing SaveAsync implementation.
+        /// </summary>
+        public void Save()
+        {
+            try
+            {
+                using var baseKey = Registry.CurrentUser.CreateSubKey(BaseRegistryKey + @"\AppSettings");
+                if (baseKey == null)
+                {
+                    throw new AppConfigurationException("Failed to create or open registry key for AppSettings.");
+                }
+
+                SaveSection(baseKey, nameof(AppSettings.Reddit), _settings.Reddit);
+                SaveSection(baseKey, nameof(AppSettings.Pexels), _settings.Pexels);
+                SaveSection(baseKey, nameof(AppSettings.Tts), _settings.Tts);
+                SaveSection(baseKey, nameof(AppSettings.ImageGeneration), _settings.ImageGeneration);
+                SaveSection(baseKey, nameof(AppSettings.YouTube), _settings.YouTube);
+                SaveSection(baseKey, nameof(AppSettings.ClipSettings), _settings.ClipSettings);
+                SaveSection(baseKey, nameof(AppSettings.GoogleCloud), _settings.GoogleCloud);
+                SaveSection(baseKey, nameof(AppSettings.AzureTts), _settings.AzureTts);
+                SaveSection(baseKey, nameof(AppSettings.Ffmpeg), _settings.Ffmpeg);
+                SaveSection(baseKey, nameof(AppSettings.ElevenLabs), _settings.ElevenLabs);
+                SaveSection(baseKey, nameof(AppSettings.TikTok), _settings.TikTok);
+
+                _logger.LogInformation("Configuration saved successfully to the registry.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to save configuration to the registry.");
+                throw new AppConfigurationException("Failed to save configuration.", ex);
+            }
+        }
+
+        /// <summary>
+        /// The asynchronous SaveAsync method now simply calls the synchronous Save method
+        /// on a background thread. This removes duplicated code.
+        /// </summary>
         public async Task SaveAsync(CancellationToken cancellationToken = default)
         {
-            await Task.Run(() =>
-            {
-                try
-                {
-                    using var baseKey = Registry.CurrentUser.CreateSubKey(BaseRegistryKey + @"\AppSettings");
-                    if (baseKey == null)
-                    {
-                        throw new AppConfigurationException("Failed to create or open registry key for AppSettings.");
-                    }
-
-                    SaveSection(baseKey, nameof(AppSettings.Reddit), _settings.Reddit);
-                    SaveSection(baseKey, nameof(AppSettings.Pexels), _settings.Pexels);
-                    SaveSection(baseKey, nameof(AppSettings.Tts), _settings.Tts);
-                    SaveSection(baseKey, nameof(AppSettings.ImageGeneration), _settings.ImageGeneration);
-                    SaveSection(baseKey, nameof(AppSettings.YouTube), _settings.YouTube);
-                    SaveSection(baseKey, nameof(AppSettings.ClipSettings), _settings.ClipSettings);
-                    SaveSection(baseKey, nameof(AppSettings.GoogleCloud), _settings.GoogleCloud);
-                    SaveSection(baseKey, nameof(AppSettings.AzureTts), _settings.AzureTts);
-                    SaveSection(baseKey, nameof(AppSettings.Ffmpeg), _settings.Ffmpeg);
-                    SaveSection(baseKey, nameof(AppSettings.ElevenLabs), _settings.ElevenLabs);
-
-                    _logger.LogInformation("Configuration saved successfully to the registry.");
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to save configuration to the registry.");
-                    throw new AppConfigurationException("Failed to save configuration.", ex);
-                }
-            }, cancellationToken);
+            await Task.Run(() => Save(), cancellationToken);
         }
 
         public Task<ClientSecrets> GetYouTubeSecretsAsync(CancellationToken cancellationToken = default)
@@ -118,6 +130,7 @@ namespace RedditVideoStudio.Infrastructure.Services
                 LoadSection(settingsKey, nameof(AppSettings.AzureTts), settings.AzureTts);
                 LoadSection(settingsKey, nameof(AppSettings.Ffmpeg), settings.Ffmpeg);
                 LoadSection(settingsKey, nameof(AppSettings.ElevenLabs), settings.ElevenLabs);
+                LoadSection(settingsKey, nameof(AppSettings.TikTok), settings.TikTok);
 
                 _logger.LogInformation("Configuration loaded successfully from the registry.");
             }
@@ -141,7 +154,6 @@ namespace RedditVideoStudio.Infrastructure.Services
 
             foreach (var prop in sectionObject.GetType().GetProperties())
             {
-                // REFACTOR: Check if the property can be written to before trying to set its value.
                 if (!prop.CanWrite) continue;
 
                 var value = sectionKey.GetValue(prop.Name);
@@ -165,7 +177,6 @@ namespace RedditVideoStudio.Infrastructure.Services
             using var sectionKey = baseKey.CreateSubKey(sectionName);
             foreach (var prop in sectionObject.GetType().GetProperties())
             {
-                // REFACTOR: Check if the property can be read before trying to save its value.
                 if (!prop.CanRead) continue;
 
                 var value = prop.GetValue(sectionObject);

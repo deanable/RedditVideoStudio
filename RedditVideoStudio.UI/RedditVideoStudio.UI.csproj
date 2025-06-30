@@ -14,19 +14,34 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="ffmpeg\**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="MediatR" Version="12.5.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.6" />
     <PackageReference Include="Serilog.Extensions.Hosting" Version="9.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
-
     <PackageReference Include="SkiaSharp" Version="3.119.0" />
     <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="3.119.0" />
   </ItemGroup>
-  
+
   <ItemGroup>
     <ProjectReference Include="..\RedditVideoStudio.Application\RedditVideoStudio.Application.csproj" />
     <ProjectReference Include="..\RedditVideoStudio.Core\RedditVideoStudio.Core.csproj" />
     <ProjectReference Include="..\RedditVideoStudio.Infrastructure\RedditVideoStudio.Infrastructure.csproj" />
     <ProjectReference Include="..\RedditVideoStudio.Shared\RedditVideoStudio.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Update="Views\Settings\DestinationsSettingsView.xaml">
+      <XamlRuntime>Wpf</XamlRuntime>
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
   </ItemGroup>
 
 </Project>

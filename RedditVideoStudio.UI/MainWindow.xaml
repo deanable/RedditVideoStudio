@@ -24,9 +24,10 @@
                 <Button Content="Settings" Click="OpenSettings_Click" Margin="0,0,10,0" Padding="10,5"/>
                 <Button Content="Reset YouTube Auth" Click="ResetYouTubeAuth_Click" Padding="10,5" ToolTip="Deletes saved YouTube login information."/>
                 <CheckBox x:Name="AutoScheduleCheckBox" Content="Auto-Schedule" VerticalAlignment="Center" Margin="15,0,0,0"
-                          ToolTip="Check this to automatically schedule uploads starting from the current time."/>
+                ToolTip="Check this to automatically schedule uploads starting from the current time."/>
+                <CheckBox x:Name="PublishToTikTokCheckBox" Content="Publish to TikTok" VerticalAlignment="Center" Margin="15,0,0,0"
+                ToolTip="Check this to upload the generated videos to TikTok."/>
             </StackPanel>
-
             <Button DockPanel.Dock="Bottom" Content="Generate Selected Videos &amp; Upload" FontWeight="Bold" Height="40" Margin="0,10,0,0" Click="GenerateVideo_Click"/>
 
             <ListBox x:Name="RedditPostListBox" SelectionMode="Extended">

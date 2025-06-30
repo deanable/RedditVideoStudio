@@ -11,8 +11,11 @@ namespace RedditVideoStudio.Domain.Models
     {
         public string ImagePath { get; set; } = string.Empty;
         public string AudioPath { get; set; } = string.Empty;
+
+        // This is the corrected, simple property. It only stores the value it is given.
         public TimeSpan StartTime { get; set; }
         public TimeSpan EndTime { get; set; }
+
         public string Position { get; set; } = "center";
     }
 }

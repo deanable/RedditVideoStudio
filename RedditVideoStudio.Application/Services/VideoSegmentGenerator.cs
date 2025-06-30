@@ -1,4 +1,4 @@
-﻿// In C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Application\Services\VideoSegmentGenerator.cs
+﻿// In: C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Application\Services\VideoSegmentGenerator.cs
 
 using Microsoft.Extensions.Logging;
 using RedditVideoStudio.Application.Extensions;
@@ -48,39 +48,63 @@ namespace RedditVideoStudio.Application.Services
             TimeSpan videoDuration;
             string? narrationPath = null;
 
-            // --- START OF CORRECTION ---
-
-            if (storyboard.Items.Any() && storyboard.Items.Any(item => !string.IsNullOrEmpty(item.AudioPath)))
+            if (storyboard.Items.Any(item => !string.IsNullOrEmpty(item.AudioPath)))
             {
-                // This block executes when there is audio to process.
-                progress.Report(new ProgressReport { Message = $"Combining audio for {segmentName}..." });
-                narrationPath = Path.Combine(tempPath, $"{segmentName}_narration.mp3");
-                await storyboard.SaveConcatenatedAudioAsync(narrationPath, _ffmpegService, cancellationToken);
+                var audioPaths = storyboard.Items
+                    .Where(i => !string.IsNullOrWhiteSpace(i.AudioPath))
+                    .Select(i => i.AudioPath!)
+                    .ToList();
 
-                // Re-measure the duration from the FINAL concatenated audio file. This is now the single source of truth.
-                videoDuration = await _audioUtility.GetAudioDurationAsync(narrationPath, cancellationToken);
-                _logger.LogInformation("Actual duration of concatenated narration track '\"{NarrationPath}\"' is {Duration}", narrationPath, videoDuration);
+                // --- START OF FINAL CORRECTION ---
 
-                // IMPORTANT: Update the storyboard's timing information with the new, accurate duration.
-                // This ensures the overlay timings passed to FFmpeg match the actual audio.
-                if (storyboard.Items.Any())
+                if (audioPaths.Count == 1)
                 {
-                    // For single-page segments, this makes the overlay last the full, correct duration.
-                    storyboard.Items.Last().EndTime = videoDuration;
+                    // If there's only one audio file, skip concatenation and use the source directly.
+                    narrationPath = audioPaths.First();
+                    _logger.LogInformation("Single audio file found for segment '{segmentName}'. Using source directly: {Path}", segmentName, narrationPath);
                 }
+                else
+                {
+                    // If there are multiple files, they must be concatenated.
+                    progress.Report(new ProgressReport { Message = $"Combining {audioPaths.Count} audio parts for {segmentName}..." });
+                    narrationPath = Path.Combine(tempPath, $"{segmentName}_narration.mp3");
+                    await storyboard.SaveConcatenatedAudioAsync(narrationPath, _ffmpegService, cancellationToken);
+                    _logger.LogInformation("{Count} audio files for segment '{segmentName}' concatenated into: {Path}", audioPaths.Count, segmentName, narrationPath);
+                }
+
+                // Get the single source of truth for duration from the FINAL audio asset.
+                videoDuration = await _audioUtility.GetAudioDurationAsync(narrationPath!, cancellationToken);
+                _logger.LogInformation("Actual final audio duration for segment '{segmentName}' is {Duration}", segmentName, videoDuration);
+
+                // Rescale the storyboard item timings to perfectly match the final audio duration.
+                var storyboardTotalDuration = storyboard.GetNextStartTime();
+                if (storyboardTotalDuration.TotalMilliseconds > 0)
+                {
+                    double scaleFactor = videoDuration.TotalMilliseconds / storyboardTotalDuration.TotalMilliseconds;
+                    if (Math.Abs(scaleFactor - 1.0) > 0.01) // Only rescale if there's a meaningful difference (e.g., > 1%)
+                    {
+                        _logger.LogWarning("Rescaling storyboard timings for segment '{segmentName}' by a factor of {ScaleFactor}", segmentName, scaleFactor);
+                        TimeSpan cumulativeDuration = TimeSpan.Zero;
+                        foreach (var item in storyboard.Items)
+                        {
+                            TimeSpan originalDuration = item.EndTime - item.StartTime;
+                            TimeSpan scaledDuration = TimeSpan.FromMilliseconds(originalDuration.TotalMilliseconds * scaleFactor);
+                            item.StartTime = cumulativeDuration;
+                            item.EndTime = cumulativeDuration + scaledDuration;
+                            cumulativeDuration = item.EndTime;
+                        }
+                    }
+                }
+                // --- END OF FINAL CORRECTION ---
             }
             else
             {
-                // This block executes if there's no audio, using the storyboard's pre-calculated duration.
                 videoDuration = storyboard.GetNextStartTime();
                 _logger.LogWarning("No audio items found for segment {SegmentName}, using storyboard duration: {Duration}", segmentName, videoDuration);
             }
 
-            // --- END OF CORRECTION ---
-
             progress.Report(new ProgressReport { Message = $"Rendering video for {segmentName}..." });
 
-            // This log will now show the correct, re-measured duration.
             _logger.LogInformation("Passing duration {Duration} to RenderFinalVideoAsync for segment '\"{SegmentName}\"'.", videoDuration, segmentName);
             await _ffmpegService.RenderFinalVideoAsync(backgroundPath, narrationPath, storyboard, videoDuration, progress, outputSegmentPath, cancellationToken);
 
