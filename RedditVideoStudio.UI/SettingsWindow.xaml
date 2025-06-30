@@ -11,6 +11,7 @@
     <Window.Resources>
         <converters:FullPathToFileNameConverter x:Key="FullPathToFileNameConverter"/>
         <converters:NotNullToBooleanConverter x:Key="NotNullToBooleanConverter"/>
+
         <Style TargetType="Label">
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
@@ -26,6 +27,11 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Margin" Value="5,2"/>
         </Style>
+
+        <DataTemplate DataType="{x:Type settingsViewModels:DestinationsSettingsViewModel}">
+            <settingsViews:DestinationsSettingsView />
+        </DataTemplate>
+
     </Window.Resources>
 
     <DockPanel Margin="15">
