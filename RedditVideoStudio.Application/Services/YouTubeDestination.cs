@@ -71,8 +71,10 @@ namespace RedditVideoStudio.Application.Services
         public async Task SignOutAsync()
         {
             _credential = null;
-            // The DeleteAsync method for the FileDataStore only takes the user key as an argument.
-            await _fileDataStore.DeleteAsync("user");
+            // CORRECTED: The DeleteAsync method is generic. Because the FileDataStore used by the
+            // authentication broker stores the token as a string (in JSON format), we must
+            // explicitly specify <string> as the type argument.
+            await _fileDataStore.DeleteAsync<string>("user");
             _logger.LogInformation("User has been signed out from YouTube, and stored credentials have been deleted.");
         }
 
