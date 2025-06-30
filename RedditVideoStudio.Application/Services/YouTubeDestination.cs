@@ -1,4 +1,6 @@
-﻿using Google.Apis.Auth.OAuth2;
+﻿// In: C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Application\Services\YouTubeDestination.cs
+
+using Google.Apis.Auth.OAuth2;
 using Google.Apis.Services;
 using Google.Apis.Upload;
 using Google.Apis.YouTube.v3.Data;
@@ -69,7 +71,8 @@ namespace RedditVideoStudio.Application.Services
         public async Task SignOutAsync()
         {
             _credential = null;
-            await _fileDataStore.DeleteAsync("user", CancellationToken.None);
+            // The DeleteAsync method for the FileDataStore only takes the user key as an argument.
+            await _fileDataStore.DeleteAsync("user");
             _logger.LogInformation("User has been signed out from YouTube, and stored credentials have been deleted.");
         }
 

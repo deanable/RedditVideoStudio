@@ -1,8 +1,11 @@
-﻿using Microsoft.Win32;
+﻿// In: C:\Users\Dean Kruger\source\repos\RedditVideoStudio\UI\SettingsWindow.xaml.cs
+
+using Microsoft.Win32;
 using RedditVideoStudio.Core.Interfaces;
 using RedditVideoStudio.Infrastructure.Services;
 using RedditVideoStudio.UI.ViewModels;
 using System;
+using System.Linq; // Added to use the .ToList() extension method
 using System.Windows;
 
 namespace RedditVideoStudio.UI
@@ -39,7 +42,8 @@ namespace RedditVideoStudio.UI
             _viewModel.Settings = _settingsService.GetSettings();
 
             // Populate the list of available Windows voices for the dropdown.
-            _viewModel.Voices = _windowsTtsService.GetVoices();
+            // The GetVoices() method returns an array (string[]), so we convert it to a List<string>.
+            _viewModel.Voices = _windowsTtsService.GetVoices().ToList();
 
             // Set the DataContext for the entire window to our ViewModel.
             // This allows the XAML to bind to properties like 'Settings', 'Destinations', and 'Voices'.
