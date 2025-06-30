@@ -1,5 +1,6 @@
 ﻿using Microsoft.Win32;
-using RedditVideoStudio.Core.Interfaces; // Using Core for interfaces, as you correctly pointed out
+using RedditVideoStudio.Core.Interfaces;
+using RedditVideoStudio.Infrastructure.Services;
 using RedditVideoStudio.UI.ViewModels;
 using System;
 using System.Windows;
@@ -15,26 +16,36 @@ namespace RedditVideoStudio.UI
         private readonly SettingsViewModel _viewModel;
         private readonly ISettingsService _settingsService;
         private readonly IFfmpegService _ffmpegService;
+        private readonly WindowsTextToSpeechService _windowsTtsService;
 
         /// <summary>
         /// The constructor receives all necessary services via dependency injection.
         /// The DI container in App.xaml.cs knows how to create and provide these.
         /// </summary>
-        public SettingsWindow(SettingsViewModel viewModel, ISettingsService settingsService, IFfmpegService ffmpegService)
+        public SettingsWindow(
+            SettingsViewModel viewModel,
+            ISettingsService settingsService,
+            IFfmpegService ffmpegService,
+            WindowsTextToSpeechService windowsTtsService) // Inject the specific service here
         {
             InitializeComponent();
 
             _viewModel = viewModel;
             _settingsService = settingsService;
             _ffmpegService = ffmpegService;
+            _windowsTtsService = windowsTtsService; // Store the service
 
             // Load a fresh, editable copy of the settings into the ViewModel.
             _viewModel.Settings = _settingsService.GetSettings();
 
+            // Populate the list of available Windows voices for the dropdown.
+            _viewModel.Voices = _windowsTtsService.GetVoices();
+
             // Set the DataContext for the entire window to our ViewModel.
-            // This allows the XAML to bind to properties like 'Settings' and 'Destinations'.
+            // This allows the XAML to bind to properties like 'Settings', 'Destinations', and 'Voices'.
             DataContext = _viewModel;
         }
+
 
         /// <summary>
         /// When the user clicks "Save and Close", we use the SettingsService

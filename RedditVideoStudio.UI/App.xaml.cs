@@ -14,6 +14,9 @@ using System.Windows;
 
 namespace RedditVideoStudio.UI
 {
+    /// <summary>
+    /// Main application class. Handles startup, DI configuration, and shutdown.
+    /// </summary>
     public partial class App : System.Windows.Application
     {
         public static IHost? Host { get; private set; }
@@ -25,6 +28,8 @@ namespace RedditVideoStudio.UI
                 ConfigureLogger();
                 Host = ConfigureHost();
                 await Host.StartAsync();
+                // After the host is built and started, get the MainWindow from the
+                // service provider and show it. All of its dependencies will be injected.
                 Host.Services.GetRequiredService<MainWindow>().Show();
             }
             catch (Exception ex)
@@ -37,17 +42,19 @@ namespace RedditVideoStudio.UI
         private IHost ConfigureHost()
         {
             return Microsoft.Extensions.Hosting.Host.CreateDefaultBuilder()
-                .UseSerilog()
+                .UseSerilog() // Use Serilog for logging throughout the application.
                 .ConfigureServices((context, services) =>
                 {
-                    // This section now includes all of your original services plus our new ones.
+                    // Register all services and view models with the DI container.
                     services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(ApplicationAssemblyReference).Assembly));
 
-                    // New/Refactored Services
+                    // Register IVideoDestination. The container will now know to provide a
+                    // YouTubeDestination instance whenever an IVideoDestination is requested.
                     services.AddSingleton<IVideoDestination, YouTubeDestination>();
+
                     services.AddSingleton<ISettingsService, SettingsService>();
 
-                    // Your Original Services (preserved)
+                    // Register other application services
                     services.AddSingleton<IAppConfiguration, RegistryAppConfiguration>();
                     services.AddSingleton<IRedditService, RedditService>();
                     services.AddSingleton<IPexelsService, PexelsService>();
@@ -57,15 +64,19 @@ namespace RedditVideoStudio.UI
                     services.AddSingleton<IYouTubeServiceFactory, YouTubeServiceFactory>();
                     services.AddSingleton<ITempDirectoryFactory, TempDirectoryFactory>();
                     services.AddSingleton<TikTokAuthService>();
+
+                    // Register all TTS implementations as singletons
                     services.AddSingleton<GoogleTextToSpeechService>();
                     services.AddSingleton<AzureTextToSpeechService>();
                     services.AddSingleton<ElevenLabsTextToSpeechService>();
                     services.AddSingleton<WindowsTextToSpeechService>();
+
+                    // Register services with transient lifetime, meaning a new instance is created each time.
                     services.AddTransient<IStoryboardGenerator, StoryboardGenerator>();
                     services.AddTransient<IVideoSegmentGenerator, VideoSegmentGenerator>();
                     services.AddSingleton<IVideoComposer, VideoComposer>();
 
-                    // Your TTS Factory
+                    // TTS Factory to select the provider based on settings
                     services.AddTransient<ITextToSpeechService>(serviceProvider =>
                     {
                         var configService = serviceProvider.GetRequiredService<IAppConfiguration>();
@@ -90,7 +101,7 @@ namespace RedditVideoStudio.UI
 
                     // UI Windows
                     services.AddSingleton<MainWindow>();
-                    services.AddTransient<SettingsWindow>();
+                    services.AddTransient<SettingsWindow>(); // Transient so a new one opens each time
                 }).Build();
         }
 

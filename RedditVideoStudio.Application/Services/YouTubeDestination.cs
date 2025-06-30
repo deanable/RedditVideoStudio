@@ -14,21 +14,44 @@ using GoogleYouTubeService = Google.Apis.YouTube.v3.YouTubeService;
 
 namespace RedditVideoStudio.Application.Services
 {
+    /// <summary>
+    /// Implementation of IVideoDestination for uploading videos to YouTube.
+    /// </summary>
     public class YouTubeDestination : IVideoDestination
     {
         private readonly IAppConfiguration _appConfiguration;
         private readonly ILogger<YouTubeDestination> _logger;
         private UserCredential? _credential;
+        private readonly FileDataStore _fileDataStore;
+        private const string CredentialDataStoreKey = "YouTube.Api.Auth.Store";
 
+        /// <summary>
+        /// Constructor for the YouTubeDestination service.
+        /// </summary>
+        /// <param name="appConfiguration">The application configuration service.</param>
+        /// <param name="logger">The logging service.</param>
         public YouTubeDestination(IAppConfiguration appConfiguration, ILogger<YouTubeDestination> logger)
         {
             _appConfiguration = appConfiguration;
             _logger = logger;
+            // The FileDataStore is responsible for storing the OAuth tokens.
+            _fileDataStore = new FileDataStore(CredentialDataStoreKey, true);
         }
 
+        /// <summary>
+        /// The display name for this destination.
+        /// </summary>
         public string Name => "YouTube";
+
+        /// <summary>
+        /// Checks if the user is currently authenticated.
+        /// </summary>
         public bool IsAuthenticated => _credential != null;
 
+        /// <summary>
+        /// Initiates the OAuth 2.0 authentication flow. This will open a browser for the user to sign in.
+        /// </summary>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
         public async Task AuthenticateAsync(CancellationToken cancellationToken = default)
         {
             var secrets = await _appConfiguration.GetYouTubeSecretsAsync(cancellationToken);
@@ -37,15 +60,25 @@ namespace RedditVideoStudio.Application.Services
                 new[] { GoogleYouTubeService.Scope.YoutubeUpload },
                 "user",
                 cancellationToken,
-                new FileDataStore("YouTube.Api.Auth.Store", true));
+                _fileDataStore); // Use the class-level FileDataStore
         }
 
-        public Task SignOutAsync()
+        /// <summary>
+        /// Signs the user out by clearing the in-memory credential and deleting the stored token file.
+        /// </summary>
+        public async Task SignOutAsync()
         {
             _credential = null;
-            return Task.CompletedTask;
+            await _fileDataStore.DeleteAsync("user", CancellationToken.None);
+            _logger.LogInformation("User has been signed out from YouTube, and stored credentials have been deleted.");
         }
 
+        /// <summary>
+        /// Uploads a video to YouTube using the authenticated user's account.
+        /// </summary>
+        /// <param name="videoPath">The local path to the video file.</param>
+        /// <param name="videoDetails">Metadata for the video (title, description, etc.).</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
         public async Task UploadVideoAsync(string videoPath, VideoDetails videoDetails, CancellationToken cancellationToken = default)
         {
             if (!IsAuthenticated || _credential == null)
@@ -66,7 +99,7 @@ namespace RedditVideoStudio.Application.Services
                     Title = videoDetails.Title,
                     Description = videoDetails.Description,
                     Tags = videoDetails.Tags,
-                    CategoryId = "20",
+                    CategoryId = "20", // "Gaming" category, can be configured
                 },
                 Status = new VideoStatus
                 {

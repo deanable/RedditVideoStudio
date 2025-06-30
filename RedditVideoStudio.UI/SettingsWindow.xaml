@@ -3,6 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:converters="clr-namespace:RedditVideoStudio.UI.Converters"
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
+        xmlns:settingsViews="clr-namespace:RedditVideoStudio.UI.Views.Settings"
+        xmlns:settingsViewModels="clr-namespace:RedditVideoStudio.UI.ViewModels.Settings"
         Title="Application Settings" Height="800" Width="800"
         WindowStartupLocation="CenterOwner" MinWidth="750" MinHeight="700">
 
@@ -34,78 +36,7 @@
 
         <TabControl>
             <TabItem Header="Destinations">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
-                    <StackPanel>
-                        <GroupBox Header="Platform Connections" Padding="10">
-                            <ItemsControl ItemsSource="{Binding Destinations.Destinations}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border BorderBrush="Gray" BorderThickness="1" CornerRadius="5" Padding="15" Margin="0,0,0,10">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <Ellipse Width="15" Height="15" Margin="0,0,15,0" VerticalAlignment="Center">
-                                                    <Ellipse.Style>
-                                                        <Style TargetType="Ellipse">
-                                                            <Setter Property="Fill" Value="LightGray"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsAuthenticated}" Value="True">
-                                                                    <Setter Property="Fill" Value="Green"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Ellipse.Style>
-                                                </Ellipse>
-                                                <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="18" VerticalAlignment="Center"/>
-                                                <StackPanel Grid.Column="2" Orientation="Horizontal">
-                                                    <Button Content="Connect" Command="{Binding AuthenticateCommand}" IsEnabled="{Binding !IsBusy}">
-                                                        <Button.Style>
-                                                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsAuthenticated}" Value="False">
-                                                                        <Setter Property="Visibility" Value="Visible"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </Button.Style>
-                                                    </Button>
-                                                    <Button Content="Disconnect" Command="{Binding SignOutCommand}" Margin="5,0,0,0" IsEnabled="{Binding !IsBusy}">
-                                                        <Button.Style>
-                                                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsAuthenticated}" Value="True">
-                                                                        <Setter Property="Visibility" Value="Visible"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </Button.Style>
-                                                    </Button>
-                                                    <ProgressBar IsIndeterminate="True" Width="100" Margin="5,0,0,0" VerticalAlignment="Center">
-                                                        <ProgressBar.Style>
-                                                            <Style TargetType="ProgressBar">
-                                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsBusy}" Value="True">
-                                                                        <Setter Property="Visibility" Value="Visible" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </ProgressBar.Style>
-                                                    </ProgressBar>
-                                                </StackPanel>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </GroupBox>
-                    </StackPanel>
-                </ScrollViewer>
+                <ContentControl Content="{Binding Destinations}" />
             </TabItem>
             <TabItem Header="Content Sources">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
@@ -358,9 +289,9 @@
                                 <ComboBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" 
                                           SelectedValue="{Binding YouTube.PrivacyStatus}"
                                           SelectedValuePath="Content">
-                                    <ComboBoxItem Content="Private"/>
-                                    <ComboBoxItem Content="Unlisted"/>
-                                    <ComboBoxItem Content="Public"/>
+                                    <ComboBoxItem Content="private"/>
+                                    <ComboBoxItem Content="unlisted"/>
+                                    <ComboBoxItem Content="public"/>
                                 </ComboBox>
 
                                 <Label Grid.Row="1" Grid.Column="0" Content="Auto-Schedule Interval:"
@@ -450,9 +381,6 @@
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
-
-           
-
         </TabControl>
     </DockPanel>
 </Window>
