@@ -1,12 +1,8 @@
-﻿using Google.Apis.Auth.OAuth2;
-using Google.Apis.Util.Store;
-using Google.Apis.YouTube.v3;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RedditVideoStudio.Core.Exceptions;
 using RedditVideoStudio.Core.Interfaces;
 using RedditVideoStudio.Domain.Models;
-using RedditVideoStudio.Infrastructure.Services;
 using RedditVideoStudio.Shared.Models;
 using RedditVideoStudio.UI.Logging;
 using RedditVideoStudio.UI.ViewModels;
@@ -153,6 +149,18 @@ namespace RedditVideoStudio.UI
             }
         }
 
+        private async void RefreshPosts_Click(object sender, RoutedEventArgs e)
+        {
+            await LoadTopPostsAsync();
+        }
+
+        private void OpenSettings_Click(object sender, RoutedEventArgs e)
+        {
+            var settingsWindow = _serviceProvider.GetRequiredService<SettingsWindow>();
+            settingsWindow.Owner = this;
+            settingsWindow.ShowDialog();
+        }
+
         private void ResetYouTubeAuth_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -170,18 +178,6 @@ namespace RedditVideoStudio.UI
                 _logger.LogError(ex, "Failed to reset YouTube authentication.");
                 MessageBox.Show($"Could not reset authentication: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
-        }
-
-        private async void RefreshPosts_Click(object sender, RoutedEventArgs e)
-        {
-            await LoadTopPostsAsync();
-        }
-
-        private void OpenSettings_Click(object sender, RoutedEventArgs e)
-        {
-            var settingsWindow = _serviceProvider.GetRequiredService<SettingsWindow>();
-            settingsWindow.Owner = this;
-            settingsWindow.ShowDialog();
         }
 
         private void HandleException(Exception ex)

@@ -11,10 +11,6 @@ using System.Threading.Tasks;
 
 namespace RedditVideoStudio.Infrastructure.Services
 {
-    /// <summary>
-    /// Implements the IImageService using the SkiaSharp library to generate
-    /// images from text and create video thumbnails.
-    /// </summary>
     public class OverlayGeneratorService : IImageService
     {
         private readonly IAppConfiguration _appConfig;
@@ -29,11 +25,9 @@ namespace RedditVideoStudio.Infrastructure.Services
         public Task<string> GenerateImageFromTextAsync(string text, string outputPath, CancellationToken cancellationToken)
         {
             var settings = _appConfig.Settings.ImageGeneration;
-            using var font = CreateFont(settings.FontFamily, settings.FontSize);
+            using var font = CreateFont(settings.FontFamily, settings.FontSize, SKFontStyle.Normal);
             return CreateImageFromText(text, outputPath, settings, font, cancellationToken);
         }
-
-        // In C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\Services\OverlayGeneratorService.cs
 
         public async Task<string> GenerateThumbnailAsync(string backgroundImagePath, string text, string outputPath, CancellationToken cancellationToken)
         {
@@ -42,33 +36,23 @@ namespace RedditVideoStudio.Infrastructure.Services
                 throw new FileNotFoundException("Thumbnail background image not found.", backgroundImagePath);
             }
 
-            // --- START OF CORRECTION ---
-
-            // Define a standard size for YouTube thumbnails
             const int thumbnailWidth = 1280;
             const int thumbnailHeight = 720;
 
             using var originalBitmap = SKBitmap.Decode(backgroundImagePath);
-
-            // Create a new bitmap with the desired thumbnail dimensions
             using var resizedBitmap = new SKBitmap(thumbnailWidth, thumbnailHeight);
 
-            // Resize the original image and draw it onto the new bitmap
-            // This uses high-quality bicubic resampling
             using (var canvas = new SKCanvas(resizedBitmap))
             {
                 canvas.DrawBitmap(originalBitmap, new SKRect(0, 0, thumbnailWidth, thumbnailHeight), new SKPaint { FilterQuality = SKFilterQuality.High });
             }
 
-            // Use the resized bitmap for the surface
             using var surface = SKSurface.Create(new SKImageInfo(thumbnailWidth, thumbnailHeight));
             var surfaceCanvas = surface.Canvas;
             surfaceCanvas.DrawBitmap(resizedBitmap, 0, 0);
 
-            // --- END OF CORRECTION ---
-
             var settings = _appConfig.Settings.ImageGeneration;
-            using var font = CreateFont(settings.FontFamily, settings.ThumbnailFontSize, SKFontStyle.Bold);
+            var font = CreateFont(settings.FontFamily, settings.ThumbnailFontSize, SKFontStyle.Bold);
 
             using var textFillPaint = new SKPaint(font)
             {
@@ -100,7 +84,6 @@ namespace RedditVideoStudio.Infrastructure.Services
             }
 
             using var image = surface.Snapshot();
-            // Using a quality of 90 is a good balance for thumbnails.
             using var data = image.Encode(SKEncodedImageFormat.Jpeg, 90);
             await using var stream = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
             await data.AsStream().CopyToAsync(stream, cancellationToken);
@@ -108,35 +91,37 @@ namespace RedditVideoStudio.Infrastructure.Services
             _logger.LogInformation("Thumbnail generated successfully at {Path}", outputPath);
             return outputPath;
         }
-        private async Task<string> CreateImageFromText(string text, string outputPath, ImageGenerationSettings settings, SKFont font, CancellationToken cancellationToken)
+        private async Task<string> CreateImageFromText(string text, string outputPath, ImageGenerationSettings imgSettings, SKFont font, CancellationToken cancellationToken)
         {
-            // Create the canvas and clear it to transparent.
-            using var surface = SKSurface.Create(new SKImageInfo(settings.ImageWidth, settings.ImageHeight, SKColorType.Bgra8888, SKAlphaType.Premul));
+            var videoSettings = _appConfig.Settings.Ffmpeg;
+            bool isPortrait = videoSettings.VideoOrientation.Equals("Portrait", StringComparison.OrdinalIgnoreCase);
+            var width = isPortrait ? 1080 : imgSettings.ImageWidth;
+            var height = isPortrait ? 1920 : imgSettings.ImageHeight;
+
+            using var surface = SKSurface.Create(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul));
             var canvas = surface.Canvas;
             canvas.Clear(SKColors.Transparent);
 
-            float maxTextWidth = settings.ImageWidth - (2 * settings.ExteriorPadding);
+            float maxTextWidth = width - (2 * imgSettings.ExteriorPadding);
             var textLines = BreakTextIntoLines(font, text, maxTextWidth);
 
-            // Check if there is any actual text to render after breaking it into lines.
             if (textLines.Any())
             {
-                // Only draw the background rectangle and text if there are lines to draw.
-                using var textPaint = new SKPaint(font) { Color = SKColor.Parse(settings.TextColor), IsAntialias = true, TextAlign = SKTextAlign.Center };
-                using var backgroundPaint = new SKPaint { Color = SKColor.Parse(settings.RectangleColor).WithAlpha((byte)(settings.BackgroundOpacity * 255)), IsAntialias = true };
+                using var textPaint = new SKPaint(font) { Color = SKColor.Parse(imgSettings.TextColor), IsAntialias = true, TextAlign = SKTextAlign.Center };
+                using var backgroundPaint = new SKPaint { Color = SKColor.Parse(imgSettings.RectangleColor).WithAlpha((byte)(imgSettings.BackgroundOpacity * 255)), IsAntialias = true };
 
                 float textBlockHeight = (textLines.Count * font.Size * 1.5f);
-                float rectHeight = textBlockHeight + (2 * settings.InteriorPadding);
-                float rectWidth = maxTextWidth + (2 * settings.InteriorPadding);
+                float rectHeight = textBlockHeight + (2 * imgSettings.InteriorPadding);
+                float rectWidth = maxTextWidth + (2 * imgSettings.InteriorPadding);
 
-                float rectLeft = (settings.ImageWidth - rectWidth) / 2;
-                float rectTop = (settings.ImageHeight - rectHeight) / 2;
+                float rectLeft = (width - rectWidth) / 2;
+                float rectTop = (height - rectHeight) / 2;
                 var rect = new SKRect(rectLeft, rectTop, rectLeft + rectWidth, rectTop + rectHeight);
 
                 canvas.DrawRoundRect(rect, 25, 25, backgroundPaint);
 
-                var startY = rect.Top + settings.InteriorPadding + font.Size;
-                float centerX = settings.ImageWidth / 2f;
+                var startY = rect.Top + imgSettings.InteriorPadding + font.Size;
+                float centerX = width / 2f;
                 foreach (var line in textLines)
                 {
                     canvas.DrawText(line, centerX, startY, textPaint);
@@ -148,19 +133,12 @@ namespace RedditVideoStudio.Infrastructure.Services
                 _logger.LogWarning("No text lines to render for overlay image at {Path}. A blank, transparent image will be created.", outputPath);
             }
 
-            // Always create and save an image file, even if it's just transparent.
-            // This prevents a FileNotFoundException in downstream processes that expect this file to exist.
             using var image = surface.Snapshot();
             using var data = image.Encode(SKEncodedImageFormat.Png, 100);
             await using var stream = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
             await data.AsStream().CopyToAsync(stream, cancellationToken);
 
             return outputPath;
-        }
-
-        private SKFont CreateFont(string fontFamily, float size)
-        {
-            return CreateFont(fontFamily, size, SKFontStyle.Normal);
         }
 
         private SKFont CreateFont(string fontFamily, float size, SKFontStyle style)
@@ -183,7 +161,8 @@ namespace RedditVideoStudio.Infrastructure.Services
             foreach (var word in words)
             {
                 var testLine = string.IsNullOrEmpty(currentLine) ? word : $"{currentLine} {word}";
-                if (font.MeasureText(testLine) > maxWidth)
+                using var paint = new SKPaint(font);
+                if (paint.MeasureText(testLine.AsSpan()) > maxWidth)
                 {
                     if (!string.IsNullOrEmpty(currentLine)) lines.Add(currentLine);
                     currentLine = word;

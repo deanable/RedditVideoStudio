@@ -1,8 +1,9 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Flurl.Http;
+using Microsoft.Extensions.Logging;
+using RedditVideoStudio.Core.Exceptions;
 using RedditVideoStudio.Core.Interfaces;
 using System.IO;
 using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -21,19 +22,39 @@ namespace RedditVideoStudio.Infrastructure.Services
 
         public async Task UploadVideoAsync(string videoPath, string title, CancellationToken cancellationToken = default)
         {
-            _logger.LogInformation("TikTokUploader: Preparing to upload '{Title}'.", title);
+            _logger.LogInformation("TikTokUploader: Starting upload process for '{Title}'.", title);
 
-            // In a real implementation, you would:
-            // 1. Create an HttpClient.
-            // 2. Set the Authorization header with the Bearer token.
-            // 3. Create a multipart/form-data request containing the video file.
-            // 4. POST the request to the TikTok API endpoint.
-            // 5. Check the response for success or failure.
+            var requestBody = new
+            {
+                post_info = new
+                {
+                    title = title,
+                    privacy_level = "PUBLIC_TO_SELF",
+                },
+                source_info = new
+                {
+                    source = "FILE_UPLOAD",
+                    video_size = new FileInfo(videoPath).Length,
+                }
+            };
 
-            _logger.LogWarning("TikTokUploader: This is a placeholder. No real upload will occur.");
-            await Task.Delay(1500, cancellationToken); // Simulate network activity
+            try
+            {
+                var response = await "https://open.tiktokapis.com/v2/post/publish/video/init/"
+                    .WithOAuthBearerToken(_accessToken)
+                    .PostJsonAsync(requestBody, HttpCompletionOption.ResponseContentRead, cancellationToken);
 
-            _logger.LogInformation("TikTokUploader: Successfully processed upload for '{title}'.", title);
+                var responseString = await response.GetStringAsync();
+                _logger.LogInformation("Successfully initiated TikTok upload. Response: {Response}", responseString);
+                _logger.LogWarning("TikTokUploader: Video upload is not fully implemented. The video file was NOT uploaded.");
+
+            }
+            catch (FlurlHttpException ex)
+            {
+                var error = await ex.GetResponseStringAsync();
+                _logger.LogError(ex, "Failed to initiate TikTok upload. Response: {Error}", error);
+                throw new ApiException($"Failed to initiate TikTok upload: {error}", ex);
+            }
         }
     }
 }
