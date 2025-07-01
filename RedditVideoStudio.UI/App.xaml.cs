@@ -9,6 +9,7 @@ using RedditVideoStudio.UI.Logging;
 using RedditVideoStudio.UI.ViewModels;
 using RedditVideoStudio.UI.ViewModels.Settings;
 using Serilog;
+using System;
 using System.IO;
 using System.Windows;
 
@@ -28,8 +29,6 @@ namespace RedditVideoStudio.UI
                 ConfigureLogger();
                 Host = ConfigureHost();
                 await Host.StartAsync();
-                // After the host is built and started, get the MainWindow from the
-                // service provider and show it. All of its dependencies will be injected.
                 Host.Services.GetRequiredService<MainWindow>().Show();
             }
             catch (Exception ex)
@@ -45,12 +44,11 @@ namespace RedditVideoStudio.UI
                 .UseSerilog() // Use Serilog for logging throughout the application.
                 .ConfigureServices((context, services) =>
                 {
-                    // Register all services and view models with the DI container.
                     services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(ApplicationAssemblyReference).Assembly));
 
-                    // Register IVideoDestination. The container will now know to provide a
-                    // YouTubeDestination instance whenever an IVideoDestination is requested.
+                    // Register Destination Services
                     services.AddSingleton<IVideoDestination, YouTubeDestination>();
+                    services.AddSingleton<IVideoDestination, TikTokDestination>();
 
                     services.AddSingleton<ISettingsService, SettingsService>();
 
@@ -63,6 +61,9 @@ namespace RedditVideoStudio.UI
                     services.AddSingleton<IFfmpegService, FfmpegService>();
                     services.AddSingleton<IYouTubeServiceFactory, YouTubeServiceFactory>();
                     services.AddSingleton<ITempDirectoryFactory, TempDirectoryFactory>();
+
+                    // TikTok Services
+                    services.AddSingleton<ITikTokServiceFactory, TikTokServiceFactory>();
                     services.AddSingleton<TikTokAuthService>();
 
                     // Register all TTS implementations as singletons
@@ -101,7 +102,7 @@ namespace RedditVideoStudio.UI
 
                     // UI Windows
                     services.AddSingleton<MainWindow>();
-                    services.AddTransient<SettingsWindow>(); // Transient so a new one opens each time
+                    services.AddTransient<SettingsWindow>();
                 }).Build();
         }
 

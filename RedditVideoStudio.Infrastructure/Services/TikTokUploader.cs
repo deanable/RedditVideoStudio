@@ -1,5 +1,4 @@
-﻿// C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\Services\TikTokUploader.cs
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using RedditVideoStudio.Core.Interfaces;
 using System.IO;
 using System.Net.Http;

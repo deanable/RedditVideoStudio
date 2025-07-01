@@ -1,5 +1,4 @@
-﻿// C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Shared\Configuration\TikTokSettings.cs
-namespace RedditVideoStudio.Shared.Configuration
+﻿namespace RedditVideoStudio.Shared.Configuration
 {
     /// <summary>
     /// Contains settings specific to the TikTok Content Posting API.

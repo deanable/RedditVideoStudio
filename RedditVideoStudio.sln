@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.14.36212.18 d17.14
+VisualStudioVersion = 17.14.36212.18
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RedditVideoStudio.Domain", "RedditVideoStudio.Domain\RedditVideoStudio.Domain.csproj", "{8C826A48-F103-456B-8EC0-6B5A8710F075}"
 EndProject
@@ -9,11 +9,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RedditVideoStudio.Shared", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RedditVideoStudio.Core", "RedditVideoStudio.Core\RedditVideoStudio.Core.csproj", "{D39A78A9-4F1F-413A-B746-7CFEE5BFDFCF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RedditVideoStudio.Infrastructure", "RedditVideoStudio.Infrastructure\RedditVideoStudio.Infrastructure.csproj", "{743E579D-4E51-46A2-ABF0-1804B4C83D3F}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RedditVideoStudio.Application", "RedditVideoStudio.Application\RedditVideoStudio.Application.csproj", "{6E5E0363-5D11-43BF-A6B6-3958F0BED8BD}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RedditVideoStudio.UI", "RedditVideoStudio.UI\RedditVideoStudio.UI.csproj", "{6EACEA04-B562-4676-A79C-A0B7D558E407}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RedditVideoStudio.Infrastructure", "RedditVideoStudio.Infrastructure\RedditVideoStudio.Infrastructure.csproj", "{17F35C13-8546-FFEA-83C1-39D649F5D48B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,10 +33,6 @@ Global
 		{D39A78A9-4F1F-413A-B746-7CFEE5BFDFCF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D39A78A9-4F1F-413A-B746-7CFEE5BFDFCF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D39A78A9-4F1F-413A-B746-7CFEE5BFDFCF}.Release|Any CPU.Build.0 = Release|Any CPU
-		{743E579D-4E51-46A2-ABF0-1804B4C83D3F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{743E579D-4E51-46A2-ABF0-1804B4C83D3F}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{743E579D-4E51-46A2-ABF0-1804B4C83D3F}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{743E579D-4E51-46A2-ABF0-1804B4C83D3F}.Release|Any CPU.Build.0 = Release|Any CPU
 		{6E5E0363-5D11-43BF-A6B6-3958F0BED8BD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{6E5E0363-5D11-43BF-A6B6-3958F0BED8BD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6E5E0363-5D11-43BF-A6B6-3958F0BED8BD}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -45,6 +41,10 @@ Global
 		{6EACEA04-B562-4676-A79C-A0B7D558E407}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6EACEA04-B562-4676-A79C-A0B7D558E407}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6EACEA04-B562-4676-A79C-A0B7D558E407}.Release|Any CPU.Build.0 = Release|Any CPU
+		{17F35C13-8546-FFEA-83C1-39D649F5D48B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{17F35C13-8546-FFEA-83C1-39D649F5D48B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{17F35C13-8546-FFEA-83C1-39D649F5D48B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{17F35C13-8546-FFEA-83C1-39D649F5D48B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -32,6 +32,7 @@ namespace RedditVideoStudio.Infrastructure.Services
             _appConfiguration.Settings.ClipSettings = settings.ClipSettings;
             _appConfiguration.Settings.AzureTts = settings.AzureTts;
             _appConfiguration.Settings.ElevenLabs = settings.ElevenLabs;
+            _appConfiguration.Settings.EnabledDestinations = settings.EnabledDestinations;
 
             _appConfiguration.Save();
         }

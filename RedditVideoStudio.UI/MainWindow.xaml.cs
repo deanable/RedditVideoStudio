@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RedditVideoStudio.Core.Exceptions;
 using RedditVideoStudio.Core.Interfaces;
+using RedditVideoStudio.Domain.Models;
 using RedditVideoStudio.Infrastructure.Services;
 using RedditVideoStudio.Shared.Models;
 using RedditVideoStudio.UI.Logging;
@@ -24,50 +25,35 @@ namespace RedditVideoStudio.UI
     public partial class MainWindow : Window
     {
         private readonly ILogger<MainWindow> _logger;
+        private readonly IServiceProvider _serviceProvider;
         private readonly IRedditService _redditService;
         private readonly IAppConfiguration _configService;
-        private readonly IImageService _imageService;
-        private readonly IPexelsService _pexelsService;
-        private readonly SettingsViewModel _settingsViewModel;
         private readonly IVideoComposer _videoComposer;
-        private readonly IYouTubeServiceFactory _youTubeServiceFactory;
-        private readonly IFfmpegService _ffmpegService;
 
         private readonly ObservableCollection<RedditPostViewModel> _fetchedPosts = new();
         private CancellationTokenSource _cancellationTokenSource = new();
-        private IYouTubeUploadService? _youTubeUploader;
 
         public MainWindow(
-            ILogger<MainWindow> logger,
-            IRedditService redditService,
-            IAppConfiguration configService,
-            IImageService imageService,
-            IPexelsService pexelsService,
-            SettingsViewModel settingsViewModel,
-            IVideoComposer videoComposer,
-            IYouTubeServiceFactory youTubeServiceFactory,
-            IFfmpegService ffmpegService)
+             ILogger<MainWindow> logger,
+             IServiceProvider serviceProvider,
+             IRedditService redditService,
+             IAppConfiguration configService,
+             IVideoComposer videoComposer)
         {
             InitializeComponent();
 
             _logger = logger;
+            _serviceProvider = serviceProvider;
             _redditService = redditService;
             _configService = configService;
-            _imageService = imageService;
-            _pexelsService = pexelsService;
-            _settingsViewModel = settingsViewModel;
             _videoComposer = videoComposer;
-            _youTubeServiceFactory = youTubeServiceFactory;
-            _ffmpegService = ffmpegService;
 
             RedditPostListBox.ItemsSource = _fetchedPosts;
-            RedditPostListBox.SelectionChanged += RedditPostListBox_SelectionChanged;
-
             var textBoxSink = new TextBoxSink(LogTextBox, Dispatcher);
             DelegatingSink.SetSink(textBoxSink);
 
             _logger.LogInformation("Application Main Window Initialized.");
-            _ = LoadAndSyncAllData();
+            _ = LoadTopPostsAsync();
         }
 
         private async void GenerateVideo_Click(object sender, RoutedEventArgs e)
@@ -79,8 +65,18 @@ namespace RedditVideoStudio.UI
                 return;
             }
 
+            var enabledDestinations = _configService.Settings.EnabledDestinations
+                .Where(kvp => kvp.Value)
+                .Select(kvp => _serviceProvider.GetServices<IVideoDestination>().First(s => s.Name == kvp.Key))
+                .ToList();
+
+            if (!enabledDestinations.Any())
+            {
+                MessageBox.Show("No destination platforms are enabled. Please enable and connect at least one in Settings.", "No Destinations", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             GenerationProgressBar.Value = 0;
-            GenerationProgressBar.Maximum = 100;
             _cancellationTokenSource = new CancellationTokenSource();
 
             IProgress<ProgressReport> progress = new Progress<ProgressReport>(report =>
@@ -89,107 +85,41 @@ namespace RedditVideoStudio.UI
                 _logger.LogInformation("[{Percentage}%] {Message}", report.Percentage, report.Message);
             });
 
-            var filesToDelete = new List<string>();
-
             try
             {
-                if (_youTubeUploader == null)
+                foreach (var destination in enabledDestinations)
                 {
-                    _logger.LogInformation("Authentication required. Starting Google Authentication for YouTube...");
-                    var credential = await AuthorizeYouTubeAsync(_cancellationTokenSource.Token);
-                    if (credential == null) throw new OperationCanceledException("YouTube authentication was canceled or failed.");
-                    _youTubeUploader = _youTubeServiceFactory.Create(credential);
-                    await SyncWithYouTubeAsync();
+                    if (!destination.IsAuthenticated)
+                    {
+                        await destination.AuthenticateAsync(_cancellationTokenSource.Token);
+                    }
                 }
 
                 foreach (var post in selectedPosts)
                 {
-                    _cancellationTokenSource.Token.ThrowIfCancellationRequested();
-                    progress.Report(new ProgressReport { Percentage = 0, Message = $"Starting process for '{post.Title}'..." });
+                    foreach (var destination in enabledDestinations)
+                    {
+                        _cancellationTokenSource.Token.ThrowIfCancellationRequested();
 
-                    string outputDir = Path.Combine(AppContext.BaseDirectory, "output");
-                    Directory.CreateDirectory(outputDir);
-                    string baseFilename = Shared.Utilities.FileUtils.SanitizeFileName(post.Title ?? string.Empty).Take(40).Aggregate("", (s, c) => s + c);
-                    string finalVideoPath = Path.Combine(outputDir, $"{baseFilename}_output.mp4");
-                    filesToDelete.Add(finalVideoPath);
+                        var orientation = destination.Name == "TikTok" ? "Portrait" : "Landscape";
+                        _logger.LogInformation("Processing post '{Title}' for destination '{Destination}' with orientation '{Orientation}'", post.Title, destination.Name, orientation);
 
-                    await _videoComposer.ComposeVideoAsync(post.Title ?? string.Empty, post.Comments.ToList(), progress, _cancellationTokenSource.Token, finalVideoPath);
+                        string outputDir = Path.Combine(AppContext.BaseDirectory, "output");
+                        Directory.CreateDirectory(outputDir);
+                        string baseFilename = Shared.Utilities.FileUtils.SanitizeFileName(post.Title ?? string.Empty).Take(40).Aggregate("", (s, c) => s + c);
+                        string finalVideoPath = Path.Combine(outputDir, $"{baseFilename}_{destination.Name}.mp4");
 
-                    progress.Report(new ProgressReport { Percentage = 95, Message = "Generating thumbnail..." });
-                    string tempThumbBgPath = Path.Combine(outputDir, $"{baseFilename}_thumb_bg.jpg");
-                    string thumbnailPath = Path.Combine(outputDir, $"{baseFilename}_thumb.jpg");
-                    filesToDelete.Add(tempThumbBgPath);
-                    filesToDelete.Add(thumbnailPath);
-                    await _pexelsService.DownloadRandomImageAsync(_configService.Settings.ImageGeneration.ThumbnailPexelsQuery, tempThumbBgPath, _cancellationTokenSource.Token);
-                    await _imageService.GenerateThumbnailAsync(tempThumbBgPath, post.Title ?? "Reddit Story", thumbnailPath, _cancellationTokenSource.Token);
+                        await _videoComposer.ComposeVideoAsync(post.Title ?? "", post.Comments, progress, _cancellationTokenSource.Token, finalVideoPath, orientation);
 
-                    progress.Report(new ProgressReport { Percentage = 98, Message = "Uploading to YouTube..." });
-                    string? videoId = await _youTubeUploader.UploadVideoAsync(finalVideoPath, thumbnailPath, post.Title ?? "", $"Read the full story on Reddit: https://reddit.com{post.Permalink}", post.ScheduledPublishTimeUtc, progress, _cancellationTokenSource.Token);
-                    post.IsAlreadyUploaded = true;
-                    _logger.LogInformation("Successfully uploaded video for post '{Title}' with YouTube ID: {VideoId}", post.Title, videoId);
+                        await destination.UploadVideoAsync(finalVideoPath, new VideoDetails { Title = post.Title ?? "" }, _cancellationTokenSource.Token);
+                    }
                 }
-
-                _logger.LogInformation("All videos rendered and scheduled for upload.");
-                MessageBox.Show("Batch video generation and upload complete!", "Done", MessageBoxButton.OK, MessageBoxImage.Information);
-
+                MessageBox.Show("All tasks completed!", "Done", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
                 HandleException(ex);
             }
-            finally
-            {
-                foreach (var file in filesToDelete)
-                {
-                    if (File.Exists(file))
-                    {
-                        try
-                        {
-                            File.Delete(file);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning(ex, "Could not delete temporary file: {File}", file);
-                        }
-                    }
-                }
-            }
-        }
-
-        private void OpenSettings_Click(object sender, RoutedEventArgs e)
-        {
-            var settingsWindow = App.Host.Services.GetRequiredService<SettingsWindow>();
-            settingsWindow.Owner = this;
-            settingsWindow.ShowDialog();
-        }
-        private async Task LoadAndSyncAllData()
-        {
-            await LoadTopPostsAsync();
-            try
-            {
-                _logger.LogInformation("Attempting background authentication with YouTube...");
-                var credential = await AuthorizeYouTubeAsync(CancellationToken.None);
-                _youTubeUploader = _youTubeServiceFactory.Create(credential);
-                _logger.LogInformation("Background authentication successful.");
-                await SyncWithYouTubeAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Could not perform initial sync with YouTube. User may need to log in.");
-            }
-        }
-
-        private async Task<UserCredential> AuthorizeYouTubeAsync(CancellationToken token)
-        {
-            var clientSecrets = await _configService.GetYouTubeSecretsAsync(token);
-            var credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
-                clientSecrets,
-                new[] { YouTubeService.Scope.YoutubeUpload, YouTubeService.Scope.YoutubeReadonly },
-                "user",
-                token,
-                new FileDataStore(Path.Combine(AppContext.BaseDirectory, "YouTube.Auth.Store"), true)
-            );
-            return credential;
         }
 
         private async Task LoadTopPostsAsync()
@@ -211,9 +141,7 @@ namespace RedditVideoStudio.UI
                             Subreddit = post.Subreddit,
                             Url = post.Url,
                             Permalink = post.Permalink,
-                            Comments = post.Comments.ToList(),
-                            ScheduledPublishTimeUtc = null,
-                            IsAlreadyUploaded = false
+                            Comments = post.Comments.ToList()
                         });
                     }
                 });
@@ -222,48 +150,6 @@ namespace RedditVideoStudio.UI
             catch (Exception ex)
             {
                 HandleException(ex);
-            }
-        }
-
-        private async Task SyncWithYouTubeAsync()
-        {
-            if (_youTubeUploader == null)
-            {
-                _logger.LogWarning("YouTube service not available for syncing.");
-                return;
-            }
-            try
-            {
-                var youtubeTitles = await _youTubeUploader.FetchUploadedVideoTitlesAsync(CancellationToken.None);
-                if (!youtubeTitles.Any()) return;
-                foreach (var post in _fetchedPosts)
-                {
-                    var sanitizedTitle = Shared.Utilities.TextUtils.SanitizeYouTubeTitle(post.Title ?? string.Empty);
-                    if (youtubeTitles.Contains(sanitizedTitle))
-                    {
-                        post.IsAlreadyUploaded = true;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to sync with YouTube channel titles.");
-            }
-        }
-
-        private async void RefreshPosts_Click(object sender, RoutedEventArgs e)
-        {
-            await LoadAndSyncAllData();
-        }
-
-        private void RedditPostListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (RedditPostListBox.SelectedItem is RedditPostViewModel selectedPost)
-            {
-                if (!selectedPost.ScheduledPublishTimeUtc.HasValue)
-                {
-                    selectedPost.ScheduledPublishTimeUtc = DateTime.Now.Date.AddDays(1).AddHours(10);
-                }
             }
         }
 
@@ -286,6 +172,18 @@ namespace RedditVideoStudio.UI
             }
         }
 
+        private async void RefreshPosts_Click(object sender, RoutedEventArgs e)
+        {
+            await LoadTopPostsAsync();
+        }
+
+        private void OpenSettings_Click(object sender, RoutedEventArgs e)
+        {
+            var settingsWindow = _serviceProvider.GetRequiredService<SettingsWindow>();
+            settingsWindow.Owner = this;
+            settingsWindow.ShowDialog();
+        }
+
         private void HandleException(Exception ex)
         {
             _logger.LogError(ex, "An error occurred: {ErrorMessage}", ex.Message);
@@ -301,9 +199,7 @@ namespace RedditVideoStudio.UI
                     title = "FFmpeg Error";
                     message = $"An error occurred while running FFmpeg: {ffmpegEx.Message}\n\nFFmpeg Output:\n{ffmpegEx.FfmpegErrorOutput}";
                     break;
-                case RedditApiException:
-                case PexelsApiException:
-                case YouTubeApiException:
+                case ApiException:
                     title = "API Error";
                     message = $"An API error occurred: {ex.Message}\nPlease check your internet connection and API keys.";
                     break;

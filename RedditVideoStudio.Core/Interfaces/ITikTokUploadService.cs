@@ -1,5 +1,4 @@
-﻿// C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Core\Interfaces\ITikTokUploadService.cs
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 
 namespace RedditVideoStudio.Core.Interfaces

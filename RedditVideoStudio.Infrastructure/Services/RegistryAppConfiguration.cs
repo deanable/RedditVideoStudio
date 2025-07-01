@@ -8,7 +8,7 @@ using System;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Text.Json; // This 'using' statement is required.
+using System.Text.Json;
 
 namespace RedditVideoStudio.Infrastructure.Services
 {
@@ -32,10 +32,6 @@ namespace RedditVideoStudio.Infrastructure.Services
             _logger.LogInformation("Configuration reloaded from registry.");
         }
 
-        /// <summary>
-        /// This is the synchronous Save method required by the IAppConfiguration interface.
-        /// Its logic is copied from your existing SaveAsync implementation.
-        /// </summary>
         public void Save()
         {
             try
@@ -67,10 +63,6 @@ namespace RedditVideoStudio.Infrastructure.Services
             }
         }
 
-        /// <summary>
-        /// The asynchronous SaveAsync method now simply calls the synchronous Save method
-        /// on a background thread. This removes duplicated code.
-        /// </summary>
         public async Task SaveAsync(CancellationToken cancellationToken = default)
         {
             await Task.Run(() => Save(), cancellationToken);

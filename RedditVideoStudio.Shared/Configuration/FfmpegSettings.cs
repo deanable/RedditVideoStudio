@@ -10,14 +10,17 @@ namespace RedditVideoStudio.Shared.Configuration
     public class FfmpegSettings
     {
         /// <summary>
+        /// The orientation of the output video. Can be "Landscape" or "Portrait".
+        /// </summary>
+        public string VideoOrientation { get; set; } = "Landscape";
+
+        /// <summary>
         /// The directory containing ffmpeg.exe and ffprobe.exe, relative to the application's startup directory.
         /// </summary>
         public string FfmpegDirectory { get; set; } = "ffmpeg";
 
         public string VideoCodec { get; set; } = "libx264";
 
-        // CORRECTED: Changed the default audio codec to 'libmp3lame',
-        // which is the standard encoder for the .mp3 file format.
         public string AudioCodec { get; set; } = "libmp3lame";
 
         public string Preset { get; set; } = "ultrafast";

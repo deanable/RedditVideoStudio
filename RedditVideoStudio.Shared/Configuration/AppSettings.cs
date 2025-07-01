@@ -1,9 +1,7 @@
-﻿// C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Shared\Configuration\AppSettings.cs
+﻿using System.Collections.Generic;
+
 namespace RedditVideoStudio.Shared.Configuration
 {
-    /// <summary>
-    /// A container for all application settings, organized by feature area.
-    /// </summary>
     public class AppSettings
     {
         public RedditSettings Reddit { get; set; } = new();
@@ -16,8 +14,7 @@ namespace RedditVideoStudio.Shared.Configuration
         public ClipSettings ClipSettings { get; set; } = new();
         public AzureTtsSettings AzureTts { get; set; } = new();
         public ElevenLabsSettings ElevenLabs { get; set; } = new();
-
-        // New property for TikTok settings
         public TikTokSettings TikTok { get; set; } = new();
+        public Dictionary<string, bool> EnabledDestinations { get; set; } = new();
     }
 }

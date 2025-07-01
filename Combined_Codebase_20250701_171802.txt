@@ -317,7 +317,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.Application")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+26c828d0bf8d218b9595990dd6eb17872c650dbc")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce0e90482f46437339677ce42aeead98c2f7b972")]
 [assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.Application")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.Application")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
@@ -346,7 +346,7 @@ global using global::System.Threading.Tasks;
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Application\obj\Debug\net9.0\RedditVideoStudio.Application.sourcelink.json">
 <![CDATA[
-{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/5bf2842653eaebf3fe96998b80e5aff1a31c349d/*"}}
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/ce0e90482f46437339677ce42aeead98c2f7b972/*"}}
 ]]>
 </File>
 
@@ -1354,10 +1354,7 @@ namespace RedditVideoStudio.Application.Services
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Application\Services\VideoComposer.cs">
 <![CDATA[
-// In: C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Application\Services\VideoComposer.cs
-
 using Microsoft.Extensions.Logging;
-using RedditVideoStudio.Core.Exceptions;
 using RedditVideoStudio.Core.Interfaces;
 using RedditVideoStudio.Domain.Models;
 using RedditVideoStudio.Shared.Models;
@@ -1399,47 +1396,19 @@ namespace RedditVideoStudio.Application.Services
             _tempDirectoryFactory = tempDirectoryFactory;
         }
 
-        public async Task ComposeVideoAsync(IProgress<ProgressReport> progress, CancellationToken cancellationToken)
+        public async Task ComposeVideoAsync(string title, List<string> comments, IProgress<ProgressReport> progress, CancellationToken cancellationToken, string outputPath, string orientation)
         {
-            var posts = await _redditService.FetchFullPostDataAsync(cancellationToken);
-            var postCount = posts.Count;
-            var postIndex = 0;
-
-            foreach (var post in posts)
+            var originalOrientation = _appConfig.Settings.Ffmpeg.VideoOrientation;
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var overallProgress = new Progress<ProgressReport>(report =>
-                {
-                    var startPercentage = (int)(((double)postIndex / postCount) * 100);
-                    var endPercentage = (int)(((double)(postIndex + 1) / postCount) * 100);
-                    var range = endPercentage - startPercentage;
-                    var scaledPercentage = startPercentage + (int)((double)report.Percentage / 100 * range);
+                // Temporarily set the orientation for this specific video composition
+                _appConfig.Settings.Ffmpeg.VideoOrientation = orientation;
+                _logger.LogInformation("Starting video composition for: '{Title}' with orientation: {Orientation}", title, orientation);
 
-                    progress.Report(new ProgressReport
-                    {
-                        Percentage = scaledPercentage,
-                        Message = $"Video {postIndex + 1}/{postCount}: {report.Message}"
-                    });
-                });
+                var clipSettings = _appConfig.Settings.ClipSettings;
+                var videoSegments = new List<string>();
 
-                var outputDir = Path.Combine(Directory.GetCurrentDirectory(), "output");
-                string baseFilename = FileUtils.SanitizeFileName(post.Title!).Take(40).Aggregate("", (s, c) => s + c);
-                string finalVideoPath = Path.Combine(outputDir, $"{baseFilename}_output.mp4");
-
-                await ComposeVideoAsync(post.Title!, post.Comments, overallProgress, cancellationToken, finalVideoPath);
-                postIndex++;
-            }
-        }
-
-        public async Task ComposeVideoAsync(string title, List<string> comments, IProgress<ProgressReport> progress, CancellationToken cancellationToken, string outputPath)
-        {
-            _logger.LogInformation("Starting video composition for: {Title}", title);
-            var clipSettings = _appConfig.Settings.ClipSettings;
-            var videoSegments = new List<string>();
-
-            using (var tempDirectory = _tempDirectoryFactory.Create())
-            {
-                try
+                using (var tempDirectory = _tempDirectoryFactory.Create())
                 {
                     if (!string.IsNullOrEmpty(clipSettings.IntroPath) && File.Exists(clipSettings.IntroPath) && clipSettings.IntroDuration > 0)
                     {
@@ -1447,41 +1416,30 @@ namespace RedditVideoStudio.Application.Services
                         videoSegments.Add(introPath);
                     }
 
-                    // Generate Title Segment
                     var titleStoryboard = await _storyboardGenerator.GenerateAsync(new[] { title }, tempDirectory.Path, "Title", progress, cancellationToken);
                     var titleSegmentPath = await _videoSegmentGenerator.GenerateAsync(titleStoryboard, "abstract", tempDirectory.Path, "Title", Path.Combine(tempDirectory.Path, "title_clip.mp4"), progress, cancellationToken);
                     videoSegments.Add(titleSegmentPath);
 
-                    // Process Break Clip
                     string? breakClipPath = null;
                     if (!string.IsNullOrEmpty(clipSettings.BreakClipPath) && File.Exists(clipSettings.BreakClipPath) && clipSettings.BreakClipDuration > 0)
                     {
                         breakClipPath = await ProcessStaticClip(clipSettings.BreakClipPath, clipSettings.BreakClipDuration, "break", tempDirectory.Path, cancellationToken);
                     }
 
-                    // Generate Comment Segments
                     if (comments.Any())
                     {
                         for (int i = 0; i < comments.Count; i++)
                         {
                             cancellationToken.ThrowIfCancellationRequested();
-
                             if (!string.IsNullOrEmpty(breakClipPath))
                             {
                                 videoSegments.Add(breakClipPath);
-                                _logger.LogInformation("Added break clip for comment {CommentNumber}", i + 1);
                             }
-
                             var comment = comments[i];
                             var commentSegmentName = $"Comment_{i + 1}";
-                            _logger.LogInformation("Generating video segment for {SegmentName}", commentSegmentName);
-
-                            // --- FINAL CORRECTION ---
-                            // Ensure each comment starts with a completely new storyboard to prevent state bleed-over.
                             var commentStoryboard = await _storyboardGenerator.GenerateAsync(new[] { comment }, tempDirectory.Path, commentSegmentName, progress, cancellationToken);
                             var commentSegmentPath = await _videoSegmentGenerator.GenerateAsync(commentStoryboard, "nature", tempDirectory.Path, commentSegmentName, Path.Combine(tempDirectory.Path, $"{commentSegmentName}_clip.mp4"), progress, cancellationToken);
                             videoSegments.Add(commentSegmentPath);
-                            // --- END OF FINAL CORRECTION ---
                         }
                     }
 
@@ -1497,11 +1455,11 @@ namespace RedditVideoStudio.Application.Services
                     _logger.LogInformation("Final video rendered successfully at: {Path}", outputPath);
                     progress.Report(new ProgressReport { Percentage = 100, Message = "Video composition complete." });
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "An error occurred during the video composition pipeline for title: {Title}", title);
-                    throw;
-                }
+            }
+            finally
+            {
+                // IMPORTANT: Restore the original setting
+                _appConfig.Settings.Ffmpeg.VideoOrientation = originalOrientation;
             }
         }
 
@@ -1518,6 +1476,11 @@ namespace RedditVideoStudio.Application.Services
             var finalClipPath = Path.Combine(tempPath, $"{clipName}_final.mp4");
             await _ffmpegService.NormalizeVideoAsync(tempClipPath, finalClipPath, cancellationToken);
             return finalClipPath;
+        }
+
+        public Task ComposeVideoAsync(IProgress<ProgressReport> progress, CancellationToken cancellationToken)
+        {
+            throw new NotImplementedException("Batch processing for multiple platforms is not yet implemented.");
         }
     }
 }
@@ -2561,7 +2524,6 @@ namespace RedditVideoStudio.Core.Interfaces
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Core\Interfaces\ITikTokUploadService.cs">
 <![CDATA[
-// C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Core\Interfaces\ITikTokUploadService.cs
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -2589,32 +2551,12 @@ using System.Threading.Tasks;
 
 namespace RedditVideoStudio.Core.Interfaces
 {
-    /// <summary>
-    /// Defines the contract for the main video composition service.
-    /// This service orchestrates the entire process of creating a video
-    /// from Reddit content.
-    /// </summary>
     public interface IVideoComposer
     {
-        /// <summary>
-        /// Composes videos for a batch of top Reddit posts.
-        /// </summary>
-        /// <param name="progress">An object to report progress on the overall operation.</param>
-        /// <param name="cancellationToken">A token to cancel the operation.</param>
         Task ComposeVideoAsync(IProgress<ProgressReport> progress, CancellationToken cancellationToken);
-
-        /// <summary>
-        /// Composes a single video from a specific Reddit post's title and comments.
-        /// </summary>
-        /// <param name="title">The title of the Reddit post.</param>
-        /// <param name="comments">A list of comments from the post.</param>
-        /// <param name="progress">An object to report progress on the video generation.</param>
-        /// <param name="cancellationToken">A token to cancel the operation.</param>
-        /// <param name="outputPath">The path to save the final rendered video.</param>
-        Task ComposeVideoAsync(string title, List<string> comments, IProgress<ProgressReport> progress, CancellationToken cancellationToken, string outputPath);
+        Task ComposeVideoAsync(string title, List<string> comments, IProgress<ProgressReport> progress, CancellationToken cancellationToken, string outputPath, string orientation);
     }
 }
-
 ]]>
 </File>
 
@@ -2775,7 +2717,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.Core")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a169e534e48d0dc4efce3153a53593cbda7d5622")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce0e90482f46437339677ce42aeead98c2f7b972")]
 [assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.Core")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.Core")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
@@ -2804,7 +2746,7 @@ global using global::System.Threading.Tasks;
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Core\obj\Debug\net9.0\RedditVideoStudio.Core.sourcelink.json">
 <![CDATA[
-{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/a169e534e48d0dc4efce3153a53593cbda7d5622/*"}}
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/ce0e90482f46437339677ce42aeead98c2f7b972/*"}}
 ]]>
 </File>
 
@@ -3693,7 +3635,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.Domain")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a169e534e48d0dc4efce3153a53593cbda7d5622")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce0e90482f46437339677ce42aeead98c2f7b972")]
 [assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.Domain")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.Domain")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
@@ -3722,7 +3664,7 @@ global using global::System.Threading.Tasks;
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Domain\obj\Debug\net9.0\RedditVideoStudio.Domain.sourcelink.json">
 <![CDATA[
-{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/a169e534e48d0dc4efce3153a53593cbda7d5622/*"}}
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/ce0e90482f46437339677ce42aeead98c2f7b972/*"}}
 ]]>
 </File>
 
@@ -4978,6 +4920,1070 @@ global using global::System.Threading.Tasks;
 </File>
 
 
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\bin\Debug\net9.0-windows\RedditVideoStudio.Infrastructure.deps.json">
+<![CDATA[
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v9.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v9.0": {
+      "RedditVideoStudio.Infrastructure/1.0.0": {
+        "dependencies": {
+          "Google.Apis.YouTube.v3": "1.69.0.3764",
+          "Google.Cloud.TextToSpeech.V1": "3.12.0",
+          "Microsoft.CognitiveServices.Speech": "1.44.0",
+          "Microsoft.Extensions.Logging.Abstractions": "9.0.6",
+          "Newtonsoft.Json": "13.0.3",
+          "RedditVideoStudio.Core": "1.0.0",
+          "RedditVideoStudio.Domain": "1.0.0",
+          "RedditVideoStudio.Shared": "1.0.0",
+          "SkiaSharp": "3.119.0",
+          "System.Speech": "9.0.6"
+        },
+        "runtime": {
+          "RedditVideoStudio.Infrastructure.dll": {}
+        }
+      },
+      "Azure.Core/1.44.1": {
+        "dependencies": {
+          "Microsoft.Bcl.AsyncInterfaces": "6.0.0",
+          "System.ClientModel": "1.1.0",
+          "System.Diagnostics.DiagnosticSource": "6.0.1",
+          "System.Memory.Data": "6.0.0",
+          "System.Numerics.Vectors": "4.5.0",
+          "System.Text.Encodings.Web": "6.0.0",
+          "System.Text.Json": "6.0.10",
+          "System.Threading.Tasks.Extensions": "4.5.4"
+        },
+        "runtime": {
+          "lib/net6.0/Azure.Core.dll": {
+            "assemblyVersion": "1.44.1.0",
+            "fileVersion": "1.4400.124.50905"
+          }
+        }
+      },
+      "Google.Api.CommonProtos/2.16.0": {
+        "dependencies": {
+          "Google.Protobuf": "3.28.2"
+        },
+        "runtime": {
+          "lib/netstandard2.0/Google.Api.CommonProtos.dll": {
+            "assemblyVersion": "2.16.0.0",
+            "fileVersion": "2.16.0.0"
+          }
+        }
+      },
+      "Google.Api.Gax/4.9.0": {
+        "dependencies": {
+          "Microsoft.Bcl.AsyncInterfaces": "6.0.0",
+          "Newtonsoft.Json": "13.0.3",
+          "System.Diagnostics.DiagnosticSource": "6.0.1"
+        },
+        "runtime": {
+          "lib/netstandard2.0/Google.Api.Gax.dll": {
+            "assemblyVersion": "4.9.0.0",
+            "fileVersion": "4.9.0.0"
+          }
+        }
+      },
+      "Google.Api.Gax.Grpc/4.9.0": {
+        "dependencies": {
+          "Google.Api.CommonProtos": "2.16.0",
+          "Google.Api.Gax": "4.9.0",
+          "Google.Apis.Auth": "1.70.0",
+          "Grpc.Auth": "2.66.0",
+          "Grpc.Core.Api": "2.66.0",
+          "Grpc.Net.Client": "2.66.0",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "9.0.6"
+        },
+        "runtime": {
+          "lib/netstandard2.0/Google.Api.Gax.Grpc.dll": {
+            "assemblyVersion": "4.9.0.0",
+            "fileVersion": "4.9.0.0"
+          }
+        }
+      },
+      "Google.Apis/1.70.0": {
+        "dependencies": {
+          "Google.Apis.Core": "1.70.0"
+        },
+        "runtime": {
+          "lib/net6.0/Google.Apis.dll": {
+            "assemblyVersion": "1.70.0.0",
+            "fileVersion": "1.70.0.0"
+          }
+        }
+      },
+      "Google.Apis.Auth/1.70.0": {
+        "dependencies": {
+          "Google.Apis": "1.70.0",
+          "Google.Apis.Core": "1.70.0",
+          "System.Management": "7.0.2"
+        },
+        "runtime": {
+          "lib/net6.0/Google.Apis.Auth.dll": {
+            "assemblyVersion": "1.70.0.0",
+            "fileVersion": "1.70.0.0"
+          }
+        }
+      },
+      "Google.Apis.Core/1.70.0": {
+        "dependencies": {
+          "Newtonsoft.Json": "13.0.3"
+        },
+        "runtime": {
+          "lib/net6.0/Google.Apis.Core.dll": {
+            "assemblyVersion": "1.70.0.0",
+            "fileVersion": "1.70.0.0"
+          }
+        }
+      },
+      "Google.Apis.YouTube.v3/1.69.0.3764": {
+        "dependencies": {
+          "Google.Apis": "1.70.0",
+          "Google.Apis.Auth": "1.70.0"
+        },
+        "runtime": {
+          "lib/net6.0/Google.Apis.YouTube.v3.dll": {
+            "assemblyVersion": "1.69.0.3764",
+            "fileVersion": "1.69.0.3764"
+          }
+        }
+      },
+      "Google.Cloud.TextToSpeech.V1/3.12.0": {
+        "dependencies": {
+          "Google.Api.Gax.Grpc": "4.9.0",
+          "Google.LongRunning": "3.3.0"
+        },
+        "runtime": {
+          "lib/netstandard2.0/Google.Cloud.TextToSpeech.V1.dll": {
+            "assemblyVersion": "3.12.0.0",
+            "fileVersion": "3.12.0.0"
+          }
+        }
+      },
+      "Google.LongRunning/3.3.0": {
+        "dependencies": {
+          "Google.Api.Gax.Grpc": "4.9.0"
+        },
+        "runtime": {
+          "lib/netstandard2.0/Google.LongRunning.dll": {
+            "assemblyVersion": "3.3.0.0",
+            "fileVersion": "3.3.0.0"
+          }
+        }
+      },
+      "Google.Protobuf/3.28.2": {
+        "runtime": {
+          "lib/net5.0/Google.Protobuf.dll": {
+            "assemblyVersion": "3.28.2.0",
+            "fileVersion": "3.28.2.0"
+          }
+        }
+      },
+      "Grpc.Auth/2.66.0": {
+        "dependencies": {
+          "Google.Apis.Auth": "1.70.0",
+          "Grpc.Core.Api": "2.66.0"
+        },
+        "runtime": {
+          "lib/netstandard2.0/Grpc.Auth.dll": {
+            "assemblyVersion": "2.0.0.0",
+            "fileVersion": "2.66.0.0"
+          }
+        }
+      },
+      "Grpc.Core.Api/2.66.0": {
+        "runtime": {
+          "lib/netstandard2.1/Grpc.Core.Api.dll": {
+            "assemblyVersion": "2.0.0.0",
+            "fileVersion": "2.66.0.0"
+          }
+        }
+      },
+      "Grpc.Net.Client/2.66.0": {
+        "dependencies": {
+          "Grpc.Net.Common": "2.66.0",
+          "Microsoft.Extensions.Logging.Abstractions": "9.0.6"
+        },
+        "runtime": {
+          "lib/net8.0/Grpc.Net.Client.dll": {
+            "assemblyVersion": "2.0.0.0",
+            "fileVersion": "2.66.0.0"
+          }
+        }
+      },
+      "Grpc.Net.Common/2.66.0": {
+        "dependencies": {
+          "Grpc.Core.Api": "2.66.0"
+        },
+        "runtime": {
+          "lib/net8.0/Grpc.Net.Common.dll": {
+            "assemblyVersion": "2.0.0.0",
+            "fileVersion": "2.66.0.0"
+          }
+        }
+      },
+      "Microsoft.Bcl.AsyncInterfaces/6.0.0": {
+        "runtime": {
+          "lib/netstandard2.1/Microsoft.Bcl.AsyncInterfaces.dll": {
+            "assemblyVersion": "6.0.0.0",
+            "fileVersion": "6.0.21.52210"
+          }
+        }
+      },
+      "Microsoft.CognitiveServices.Speech/1.44.0": {
+        "dependencies": {
+          "Azure.Core": "1.44.1"
+        },
+        "runtime": {
+          "lib/netstandard2.0/Microsoft.CognitiveServices.Speech.csharp.dll": {
+            "assemblyVersion": "1.44.0.28",
+            "fileVersion": "1.44.0.28"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/linux-arm/lib/netstandard2.0/Microsoft.CognitiveServices.Speech.csharp.dll": {
+            "rid": "linux-arm",
+            "assetType": "runtime",
+            "assemblyVersion": "1.44.0.28",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/linux-arm64/lib/netstandard2.0/Microsoft.CognitiveServices.Speech.csharp.dll": {
+            "rid": "linux-arm64",
+            "assetType": "runtime",
+            "assemblyVersion": "1.44.0.28",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/linux-x64/lib/netstandard2.0/Microsoft.CognitiveServices.Speech.csharp.dll": {
+            "rid": "linux-x64",
+            "assetType": "runtime",
+            "assemblyVersion": "1.44.0.28",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/osx-arm64/lib/netstandard2.0/Microsoft.CognitiveServices.Speech.csharp.dll": {
+            "rid": "osx-arm64",
+            "assetType": "runtime",
+            "assemblyVersion": "1.44.0.28",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/osx-x64/lib/netstandard2.0/Microsoft.CognitiveServices.Speech.csharp.dll": {
+            "rid": "osx-x64",
+            "assetType": "runtime",
+            "assemblyVersion": "1.44.0.28",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/android-arm/native/libMicrosoft.CognitiveServices.Speech.core.so": {
+            "rid": "android-arm",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/android-arm/native/libMicrosoft.CognitiveServices.Speech.extension.audio.sys.so": {
+            "rid": "android-arm",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/android-arm/native/libMicrosoft.CognitiveServices.Speech.extension.kws.ort.so": {
+            "rid": "android-arm",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/android-arm/native/libMicrosoft.CognitiveServices.Speech.extension.kws.so": {
+            "rid": "android-arm",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/android-arm/native/libMicrosoft.CognitiveServices.Speech.extension.lu.so": {
+            "rid": "android-arm",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/android-arm64/native/libMicrosoft.CognitiveServices.Speech.core.so": {
+            "rid": "android-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/android-arm64/native/libMicrosoft.CognitiveServices.Speech.extension.audio.sys.so": {
+            "rid": "android-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/android-arm64/native/libMicrosoft.CognitiveServices.Speech.extension.kws.ort.so": {
+            "rid": "android-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/android-arm64/native/libMicrosoft.CognitiveServices.Speech.extension.kws.so": {
+            "rid": "android-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/android-arm64/native/libMicrosoft.CognitiveServices.Speech.extension.lu.so": {
+            "rid": "android-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/android-x64/native/libMicrosoft.CognitiveServices.Speech.core.so": {
+            "rid": "android-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/android-x64/native/libMicrosoft.CognitiveServices.Speech.extension.audio.sys.so": {
+            "rid": "android-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/android-x64/native/libMicrosoft.CognitiveServices.Speech.extension.kws.ort.so": {
+            "rid": "android-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/android-x64/native/libMicrosoft.CognitiveServices.Speech.extension.kws.so": {
+            "rid": "android-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/android-x64/native/libMicrosoft.CognitiveServices.Speech.extension.lu.so": {
+            "rid": "android-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/android-x86/native/libMicrosoft.CognitiveServices.Speech.core.so": {
+            "rid": "android-x86",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/android-x86/native/libMicrosoft.CognitiveServices.Speech.extension.audio.sys.so": {
+            "rid": "android-x86",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/android-x86/native/libMicrosoft.CognitiveServices.Speech.extension.kws.ort.so": {
+            "rid": "android-x86",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/android-x86/native/libMicrosoft.CognitiveServices.Speech.extension.kws.so": {
+            "rid": "android-x86",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/android-x86/native/libMicrosoft.CognitiveServices.Speech.extension.lu.so": {
+            "rid": "android-x86",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/ios-arm64/native/libMicrosoft.CognitiveServices.Speech.core.a": {
+            "rid": "ios-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/iossimulator-arm64/native/libMicrosoft.CognitiveServices.Speech.core.a": {
+            "rid": "iossimulator-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/iossimulator-x64/native/libMicrosoft.CognitiveServices.Speech.core.a": {
+            "rid": "iossimulator-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-arm/native/libMicrosoft.CognitiveServices.Speech.core.so": {
+            "rid": "linux-arm",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-arm/native/libMicrosoft.CognitiveServices.Speech.extension.audio.sys.so": {
+            "rid": "linux-arm",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-arm/native/libMicrosoft.CognitiveServices.Speech.extension.codec.so": {
+            "rid": "linux-arm",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-arm/native/libMicrosoft.CognitiveServices.Speech.extension.kws.ort.so": {
+            "rid": "linux-arm",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-arm/native/libMicrosoft.CognitiveServices.Speech.extension.kws.so": {
+            "rid": "linux-arm",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-arm/native/libMicrosoft.CognitiveServices.Speech.extension.lu.so": {
+            "rid": "linux-arm",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-arm/native/libpal_azure_c_shared.so": {
+            "rid": "linux-arm",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-arm/native/libpal_azure_c_shared_openssl3.so": {
+            "rid": "linux-arm",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-arm64/native/libMicrosoft.CognitiveServices.Speech.core.so": {
+            "rid": "linux-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-arm64/native/libMicrosoft.CognitiveServices.Speech.extension.audio.sys.so": {
+            "rid": "linux-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-arm64/native/libMicrosoft.CognitiveServices.Speech.extension.codec.so": {
+            "rid": "linux-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-arm64/native/libMicrosoft.CognitiveServices.Speech.extension.kws.ort.so": {
+            "rid": "linux-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-arm64/native/libMicrosoft.CognitiveServices.Speech.extension.kws.so": {
+            "rid": "linux-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-arm64/native/libMicrosoft.CognitiveServices.Speech.extension.lu.so": {
+            "rid": "linux-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-arm64/native/libpal_azure_c_shared.so": {
+            "rid": "linux-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-arm64/native/libpal_azure_c_shared_openssl3.so": {
+            "rid": "linux-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libMicrosoft.CognitiveServices.Speech.core.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libMicrosoft.CognitiveServices.Speech.extension.audio.sys.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libMicrosoft.CognitiveServices.Speech.extension.codec.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libMicrosoft.CognitiveServices.Speech.extension.kws.ort.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libMicrosoft.CognitiveServices.Speech.extension.kws.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libMicrosoft.CognitiveServices.Speech.extension.lu.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libpal_azure_c_shared.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libpal_azure_c_shared_openssl3.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/maccatalyst-arm64/native/libMicrosoft.CognitiveServices.Speech.core.a": {
+            "rid": "maccatalyst-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/maccatalyst-x64/native/libMicrosoft.CognitiveServices.Speech.core.a": {
+            "rid": "maccatalyst-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libMicrosoft.CognitiveServices.Speech.core.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libMicrosoft.CognitiveServices.Speech.extension.kws.ort.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-x64/native/libMicrosoft.CognitiveServices.Speech.core.dylib": {
+            "rid": "osx-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-x64/native/libMicrosoft.CognitiveServices.Speech.extension.kws.ort.dylib": {
+            "rid": "osx-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-arm/native/Microsoft.CognitiveServices.Speech.core.dll": {
+            "rid": "win-arm",
+            "assetType": "native",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/win-arm/native/Microsoft.CognitiveServices.Speech.extension.audio.sys.dll": {
+            "rid": "win-arm",
+            "assetType": "native",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/win-arm/native/Microsoft.CognitiveServices.Speech.extension.lu.dll": {
+            "rid": "win-arm",
+            "assetType": "native",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/win-arm64/native/Microsoft.CognitiveServices.Speech.core.dll": {
+            "rid": "win-arm64",
+            "assetType": "native",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/win-arm64/native/Microsoft.CognitiveServices.Speech.extension.audio.sys.dll": {
+            "rid": "win-arm64",
+            "assetType": "native",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/win-arm64/native/Microsoft.CognitiveServices.Speech.extension.kws.dll": {
+            "rid": "win-arm64",
+            "assetType": "native",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/win-arm64/native/Microsoft.CognitiveServices.Speech.extension.kws.ort.dll": {
+            "rid": "win-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-arm64/native/Microsoft.CognitiveServices.Speech.extension.lu.dll": {
+            "rid": "win-arm64",
+            "assetType": "native",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/win-x64/native/Microsoft.CognitiveServices.Speech.core.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/win-x64/native/Microsoft.CognitiveServices.Speech.extension.audio.sys.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/win-x64/native/Microsoft.CognitiveServices.Speech.extension.codec.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/win-x64/native/Microsoft.CognitiveServices.Speech.extension.kws.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/win-x64/native/Microsoft.CognitiveServices.Speech.extension.kws.ort.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/Microsoft.CognitiveServices.Speech.extension.lu.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/win-x86/native/Microsoft.CognitiveServices.Speech.core.dll": {
+            "rid": "win-x86",
+            "assetType": "native",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/win-x86/native/Microsoft.CognitiveServices.Speech.extension.audio.sys.dll": {
+            "rid": "win-x86",
+            "assetType": "native",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/win-x86/native/Microsoft.CognitiveServices.Speech.extension.codec.dll": {
+            "rid": "win-x86",
+            "assetType": "native",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/win-x86/native/Microsoft.CognitiveServices.Speech.extension.kws.dll": {
+            "rid": "win-x86",
+            "assetType": "native",
+            "fileVersion": "1.44.0.28"
+          },
+          "runtimes/win-x86/native/Microsoft.CognitiveServices.Speech.extension.kws.ort.dll": {
+            "rid": "win-x86",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x86/native/Microsoft.CognitiveServices.Speech.extension.lu.dll": {
+            "rid": "win-x86",
+            "assetType": "native",
+            "fileVersion": "1.44.0.28"
+          }
+        }
+      },
+      "Microsoft.Extensions.DependencyInjection.Abstractions/9.0.6": {
+        "runtime": {
+          "lib/net9.0/Microsoft.Extensions.DependencyInjection.Abstractions.dll": {
+            "assemblyVersion": "9.0.0.0",
+            "fileVersion": "9.0.625.26613"
+          }
+        }
+      },
+      "Microsoft.Extensions.Logging.Abstractions/9.0.6": {
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "9.0.6"
+        },
+        "runtime": {
+          "lib/net9.0/Microsoft.Extensions.Logging.Abstractions.dll": {
+            "assemblyVersion": "9.0.0.0",
+            "fileVersion": "9.0.625.26613"
+          }
+        }
+      },
+      "Newtonsoft.Json/13.0.3": {
+        "runtime": {
+          "lib/net6.0/Newtonsoft.Json.dll": {
+            "assemblyVersion": "13.0.0.0",
+            "fileVersion": "13.0.3.27908"
+          }
+        }
+      },
+      "SkiaSharp/3.119.0": {
+        "dependencies": {
+          "SkiaSharp.NativeAssets.Win32": "3.119.0",
+          "SkiaSharp.NativeAssets.macOS": "3.119.0"
+        },
+        "runtime": {
+          "lib/net8.0/SkiaSharp.dll": {
+            "assemblyVersion": "3.119.0.0",
+            "fileVersion": "3.119.0.0"
+          }
+        }
+      },
+      "SkiaSharp.NativeAssets.macOS/3.119.0": {
+        "runtimeTargets": {
+          "runtimes/osx/native/libSkiaSharp.dylib": {
+            "rid": "osx",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "SkiaSharp.NativeAssets.Win32/3.119.0": {
+        "runtimeTargets": {
+          "runtimes/win-arm64/native/libSkiaSharp.dll": {
+            "rid": "win-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/libSkiaSharp.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x86/native/libSkiaSharp.dll": {
+            "rid": "win-x86",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "System.ClientModel/1.1.0": {
+        "dependencies": {
+          "System.Memory.Data": "6.0.0",
+          "System.Text.Json": "6.0.10"
+        },
+        "runtime": {
+          "lib/net6.0/System.ClientModel.dll": {
+            "assemblyVersion": "1.1.0.0",
+            "fileVersion": "1.100.24.46703"
+          }
+        }
+      },
+      "System.CodeDom/7.0.0": {},
+      "System.Diagnostics.DiagnosticSource/6.0.1": {
+        "dependencies": {
+          "System.Runtime.CompilerServices.Unsafe": "6.0.0"
+        }
+      },
+      "System.Management/7.0.2": {
+        "dependencies": {
+          "System.CodeDom": "7.0.0"
+        },
+        "runtime": {
+          "lib/net7.0/System.Management.dll": {
+            "assemblyVersion": "7.0.0.2",
+            "fileVersion": "7.0.723.27404"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/net7.0/System.Management.dll": {
+            "rid": "win",
+            "assetType": "runtime",
+            "assemblyVersion": "7.0.0.2",
+            "fileVersion": "7.0.723.27404"
+          }
+        }
+      },
+      "System.Memory.Data/6.0.0": {
+        "dependencies": {
+          "System.Text.Json": "6.0.10"
+        },
+        "runtime": {
+          "lib/net6.0/System.Memory.Data.dll": {
+            "assemblyVersion": "6.0.0.0",
+            "fileVersion": "6.0.21.52210"
+          }
+        }
+      },
+      "System.Numerics.Vectors/4.5.0": {},
+      "System.Runtime.CompilerServices.Unsafe/6.0.0": {},
+      "System.Speech/9.0.6": {
+        "runtime": {
+          "lib/net9.0/System.Speech.dll": {
+            "assemblyVersion": "9.0.0.6",
+            "fileVersion": "9.0.625.26613"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/net9.0/System.Speech.dll": {
+            "rid": "win",
+            "assetType": "runtime",
+            "assemblyVersion": "9.0.0.6",
+            "fileVersion": "9.0.625.26613"
+          }
+        }
+      },
+      "System.Text.Encodings.Web/6.0.0": {
+        "dependencies": {
+          "System.Runtime.CompilerServices.Unsafe": "6.0.0"
+        }
+      },
+      "System.Text.Json/6.0.10": {
+        "dependencies": {
+          "System.Runtime.CompilerServices.Unsafe": "6.0.0",
+          "System.Text.Encodings.Web": "6.0.0"
+        }
+      },
+      "System.Threading.Tasks.Extensions/4.5.4": {},
+      "RedditVideoStudio.Core/1.0.0": {
+        "dependencies": {
+          "Google.Apis.Auth": "1.70.0",
+          "RedditVideoStudio.Domain": "1.0.0",
+          "RedditVideoStudio.Shared": "1.0.0"
+        },
+        "runtime": {
+          "RedditVideoStudio.Core.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "RedditVideoStudio.Domain/1.0.0": {
+        "runtime": {
+          "RedditVideoStudio.Domain.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "RedditVideoStudio.Shared/1.0.0": {
+        "runtime": {
+          "RedditVideoStudio.Shared.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "RedditVideoStudio.Infrastructure/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Azure.Core/1.44.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-YyznXLQZCregzHvioip07/BkzjuWNXogJEVz9T5W6TwjNr17ax41YGzYMptlo2G10oLCuVPoyva62y0SIRDixg==",
+      "path": "azure.core/1.44.1",
+      "hashPath": "azure.core.1.44.1.nupkg.sha512"
+    },
+    "Google.Api.CommonProtos/2.16.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-37MuZrE9AAqHAdYgFLoTHydAiXDRriQZGVKEg6fr6ASnrY5GtauYXnQrGk5x2K3NmYzEXe+wkpaPVmxjb3NKjg==",
+      "path": "google.api.commonprotos/2.16.0",
+      "hashPath": "google.api.commonprotos.2.16.0.nupkg.sha512"
+    },
+    "Google.Api.Gax/4.9.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-fjHHYcQ99u0ztqwT537rvVtJMdDy6G2VHBZ+F1cBjDGYNVZfrpk40DMQ/OpUGToT9ZGHVirhh3eJ73bw2ANVPQ==",
+      "path": "google.api.gax/4.9.0",
+      "hashPath": "google.api.gax.4.9.0.nupkg.sha512"
+    },
+    "Google.Api.Gax.Grpc/4.9.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-ToCx/0cs+wJ9j7vzKRcPAKneJVZrz/s9JhW9QsFx1dar9WzTxawQZ8xTjyieSy8tY0UiYCL1qYkn/iRrklYnSA==",
+      "path": "google.api.gax.grpc/4.9.0",
+      "hashPath": "google.api.gax.grpc.4.9.0.nupkg.sha512"
+    },
+    "Google.Apis/1.70.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-K6VKPkHRN1P7pMb84eZu1rFyoie7LIYYsjTPvTnEH2lbscU1sBLR1C1MtsCoSJzgDIjr0yVGmSKnIC4D73ro1g==",
+      "path": "google.apis/1.70.0",
+      "hashPath": "google.apis.1.70.0.nupkg.sha512"
+    },
+    "Google.Apis.Auth/1.70.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-2gnpcYUaD5WS2/2922J+ji1tEKcNtxu+aQoiNVWhfcGwDqgcc5vk6ND6591M2UaGzJn0EdH325rsNHzi/MvA/A==",
+      "path": "google.apis.auth/1.70.0",
+      "hashPath": "google.apis.auth.1.70.0.nupkg.sha512"
+    },
+    "Google.Apis.Core/1.70.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-R7Mbea2iB/TN+3BA1LPCqb1eT2HxnILJ+ASl5pdhHHc8uSe95JTTnM2DEVbVBQ3vo9/FpbBxWBRjP1ed9QK9CQ==",
+      "path": "google.apis.core/1.70.0",
+      "hashPath": "google.apis.core.1.70.0.nupkg.sha512"
+    },
+    "Google.Apis.YouTube.v3/1.69.0.3764": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-WgGG6+Nr6Tr/TZsU/KOUWBuOOUVeHuG3Yp40DzSl95grFkKSRqKdlaIYNFnc9CyBF77pBfbscrSfhMkUVqbukA==",
+      "path": "google.apis.youtube.v3/1.69.0.3764",
+      "hashPath": "google.apis.youtube.v3.1.69.0.3764.nupkg.sha512"
+    },
+    "Google.Cloud.TextToSpeech.V1/3.12.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-5eIfjGicnKagFSkmF5vyJt2x6JdBIs+tjBKPU3E8ppZ4587CwlgVYixa72WL9yygPijjGvlUg+3vwssAz8z+KQ==",
+      "path": "google.cloud.texttospeech.v1/3.12.0",
+      "hashPath": "google.cloud.texttospeech.v1.3.12.0.nupkg.sha512"
+    },
+    "Google.LongRunning/3.3.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-F2SZ83Jo466Wj/s1Z7QhIAmWBXxJZQyXZpcx0P8BR7d6s0FAj67vQjeUPESSJcvsy8AqYiYBhkUr2YpZhTQeHg==",
+      "path": "google.longrunning/3.3.0",
+      "hashPath": "google.longrunning.3.3.0.nupkg.sha512"
+    },
+    "Google.Protobuf/3.28.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-Z86ZKAB+v1B/m0LTM+EVamvZlYw/g3VND3/Gs4M/+aDIxa2JE9YPKjDxTpf0gv2sh26hrve3eI03brxBmzn92g==",
+      "path": "google.protobuf/3.28.2",
+      "hashPath": "google.protobuf.3.28.2.nupkg.sha512"
+    },
+    "Grpc.Auth/2.66.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-FRQlhMAcHf0GjAXIfhN6RydfZncLLXNNTOtpLL1bt57kp59vu40faW+dr6Vwl7ef/IUFfF38aiB5jvhAA/9Aow==",
+      "path": "grpc.auth/2.66.0",
+      "hashPath": "grpc.auth.2.66.0.nupkg.sha512"
+    },
+    "Grpc.Core.Api/2.66.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-HsjsQVAHe4hqP4t4rpUnmq+MZvPdyrlPsWF4T5fbMvyP3o/lMV+KVJfDlaNH8+v0aGQTVT3EsDFufbhaWb52cw==",
+      "path": "grpc.core.api/2.66.0",
+      "hashPath": "grpc.core.api.2.66.0.nupkg.sha512"
+    },
+    "Grpc.Net.Client/2.66.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-GwkSsssXFgN9+M2U+UQWdErf61sn1iqgP+2NRBlDXATcP9vlxda0wySxd/eIL8U522+SnyFNUXlvQ5tAzGk9cA==",
+      "path": "grpc.net.client/2.66.0",
+      "hashPath": "grpc.net.client.2.66.0.nupkg.sha512"
+    },
+    "Grpc.Net.Common/2.66.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-YJpQpIvpo0HKlsG6SHwaieyji08qfv0DdEDIewCAA0egQY08637sHOj1netLGUhzBEsCqlGC3e92TZ2uqhxnvw==",
+      "path": "grpc.net.common/2.66.0",
+      "hashPath": "grpc.net.common.2.66.0.nupkg.sha512"
+    },
+    "Microsoft.Bcl.AsyncInterfaces/6.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-UcSjPsst+DfAdJGVDsu346FX0ci0ah+lw3WRtn18NUwEqRt70HaOQ7lI72vy3+1LxtqI3T5GWwV39rQSrCzAeg==",
+      "path": "microsoft.bcl.asyncinterfaces/6.0.0",
+      "hashPath": "microsoft.bcl.asyncinterfaces.6.0.0.nupkg.sha512"
+    },
+    "Microsoft.CognitiveServices.Speech/1.44.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-pUGHPjxsv72SYw2Fh0rQV8NehZcDqzlUMLZ1keOSWaX8Yqs6QcANIu+xopdRnI2V8rY0x+8GJ8Ern/i4+D6Hdw==",
+      "path": "microsoft.cognitiveservices.speech/1.44.0",
+      "hashPath": "microsoft.cognitiveservices.speech.1.44.0.nupkg.sha512"
+    },
+    "Microsoft.Extensions.DependencyInjection.Abstractions/9.0.6": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-0Zn6nR/6g+90MxskZyOOMPQvnPnrrGu6bytPwkV+azDcTtCSuQ1+GJUrg8Klmnrjk1i6zMpw2lXijl+tw7Q3kA==",
+      "path": "microsoft.extensions.dependencyinjection.abstractions/9.0.6",
+      "hashPath": "microsoft.extensions.dependencyinjection.abstractions.9.0.6.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Logging.Abstractions/9.0.6": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-LFnyBNK7WtFmKdnHu3v0HOYQ8BcjYuy0jdC9pgCJ/rbLKoJEG9/dBzSKMEeeWDbDeoWS0TIxOC8a9CM5ufca3A==",
+      "path": "microsoft.extensions.logging.abstractions/9.0.6",
+      "hashPath": "microsoft.extensions.logging.abstractions.9.0.6.nupkg.sha512"
+    },
+    "Newtonsoft.Json/13.0.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ==",
+      "path": "newtonsoft.json/13.0.3",
+      "hashPath": "newtonsoft.json.13.0.3.nupkg.sha512"
+    },
+    "SkiaSharp/3.119.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-gR9yVoOta2Mc1Rxt15LD65AckfHMfwjIs/3kkD59C9bT2nYYISsE6uz3t4aMPNHA6CgsIL0Ssn+jE5OVilZ1yw==",
+      "path": "skiasharp/3.119.0",
+      "hashPath": "skiasharp.3.119.0.nupkg.sha512"
+    },
+    "SkiaSharp.NativeAssets.macOS/3.119.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-YE1vNn0Nyw2PWtv7hw1PYkKJO0itFiQp9vSqGppZUKzQJqwp28a2jgdCMPfYtOiR8KCnDgZqQoynqJRRaE2ZVg==",
+      "path": "skiasharp.nativeassets.macos/3.119.0",
+      "hashPath": "skiasharp.nativeassets.macos.3.119.0.nupkg.sha512"
+    },
+    "SkiaSharp.NativeAssets.Win32/3.119.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-IwC9yx36lOdXVT2DjgmWHl1qkVspfj8ctd4+li8CNnvqdfaTolXCOh6TLznURcPAvzatx9K/tLOB7zT6T8EA9w==",
+      "path": "skiasharp.nativeassets.win32/3.119.0",
+      "hashPath": "skiasharp.nativeassets.win32.3.119.0.nupkg.sha512"
+    },
+    "System.ClientModel/1.1.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-UocOlCkxLZrG2CKMAAImPcldJTxeesHnHGHwhJ0pNlZEvEXcWKuQvVOER2/NiOkJGRJk978SNdw3j6/7O9H1lg==",
+      "path": "system.clientmodel/1.1.0",
+      "hashPath": "system.clientmodel.1.1.0.nupkg.sha512"
+    },
+    "System.CodeDom/7.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-GLltyqEsE5/3IE+zYRP5sNa1l44qKl9v+bfdMcwg+M9qnQf47wK3H0SUR/T+3N4JEQXF3vV4CSuuo0rsg+nq2A==",
+      "path": "system.codedom/7.0.0",
+      "hashPath": "system.codedom.7.0.0.nupkg.sha512"
+    },
+    "System.Diagnostics.DiagnosticSource/6.0.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-KiLYDu2k2J82Q9BJpWiuQqCkFjRBWVq4jDzKKWawVi9KWzyD0XG3cmfX0vqTQlL14Wi9EufJrbL0+KCLTbqWiQ==",
+      "path": "system.diagnostics.diagnosticsource/6.0.1",
+      "hashPath": "system.diagnostics.diagnosticsource.6.0.1.nupkg.sha512"
+    },
+    "System.Management/7.0.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-/qEUN91mP/MUQmJnM5y5BdT7ZoPuVrtxnFlbJ8a3kBJGhe2wCzBfnPFtK2wTtEEcf3DMGR9J00GZZfg6HRI6yA==",
+      "path": "system.management/7.0.2",
+      "hashPath": "system.management.7.0.2.nupkg.sha512"
+    },
+    "System.Memory.Data/6.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-ntFHArH3I4Lpjf5m4DCXQHJuGwWPNVJPaAvM95Jy/u+2Yzt2ryiyIN04LAogkjP9DeRcEOiviAjQotfmPq/FrQ==",
+      "path": "system.memory.data/6.0.0",
+      "hashPath": "system.memory.data.6.0.0.nupkg.sha512"
+    },
+    "System.Numerics.Vectors/4.5.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-QQTlPTl06J/iiDbJCiepZ4H//BVraReU4O4EoRw1U02H5TLUIT7xn3GnDp9AXPSlJUDyFs4uWjWafNX6WrAojQ==",
+      "path": "system.numerics.vectors/4.5.0",
+      "hashPath": "system.numerics.vectors.4.5.0.nupkg.sha512"
+    },
+    "System.Runtime.CompilerServices.Unsafe/6.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-/iUeP3tq1S0XdNNoMz5C9twLSrM/TH+qElHkXWaPvuNOt+99G75NrV0OS2EqHx5wMN7popYjpc8oTjC1y16DLg==",
+      "path": "system.runtime.compilerservices.unsafe/6.0.0",
+      "hashPath": "system.runtime.compilerservices.unsafe.6.0.0.nupkg.sha512"
+    },
+    "System.Speech/9.0.6": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-Cyc9GLB8OpPNFFSlvnaLzkLSyGCuIENllB47w0WwP+SzVfDWvGdTEK1iIaMQEoRjpdl4sRYrchCDYx6GqNlu/w==",
+      "path": "system.speech/9.0.6",
+      "hashPath": "system.speech.9.0.6.nupkg.sha512"
+    },
+    "System.Text.Encodings.Web/6.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-Vg8eB5Tawm1IFqj4TVK1czJX89rhFxJo9ELqc/Eiq0eXy13RK00eubyU6TJE6y+GQXjyV5gSfiewDUZjQgSE0w==",
+      "path": "system.text.encodings.web/6.0.0",
+      "hashPath": "system.text.encodings.web.6.0.0.nupkg.sha512"
+    },
+    "System.Text.Json/6.0.10": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-NSB0kDipxn2ychp88NXWfFRFlmi1bst/xynOutbnpEfRCT9JZkZ7KOmF/I/hNKo2dILiMGnqblm+j1sggdLB9g==",
+      "path": "system.text.json/6.0.10",
+      "hashPath": "system.text.json.6.0.10.nupkg.sha512"
+    },
+    "System.Threading.Tasks.Extensions/4.5.4": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-zteT+G8xuGu6mS+mzDzYXbzS7rd3K6Fjb9RiZlYlJPam2/hU7JCBZBVEcywNuR+oZ1ncTvc/cq0faRr3P01OVg==",
+      "path": "system.threading.tasks.extensions/4.5.4",
+      "hashPath": "system.threading.tasks.extensions.4.5.4.nupkg.sha512"
+    },
+    "RedditVideoStudio.Core/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "RedditVideoStudio.Domain/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "RedditVideoStudio.Shared/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}
+]]>
+</File>
+
+
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\obj\Debug\net9.0\.NETCoreApp,Version=v9.0.AssemblyAttributes.cs">
 <![CDATA[
 // <autogenerated />
@@ -5007,7 +6013,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.Infrastructure")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a169e534e48d0dc4efce3153a53593cbda7d5622")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce0e90482f46437339677ce42aeead98c2f7b972")]
 [assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.Infrastructure")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.Infrastructure")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
@@ -5036,7 +6042,74 @@ global using global::System.Threading.Tasks;
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\obj\Debug\net9.0\RedditVideoStudio.Infrastructure.sourcelink.json">
 <![CDATA[
-{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/a169e534e48d0dc4efce3153a53593cbda7d5622/*"}}
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/ce0e90482f46437339677ce42aeead98c2f7b972/*"}}
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\obj\Debug\net9.0-windows\.NETCoreApp,Version=v9.0.AssemblyAttributes.cs">
+<![CDATA[
+// <autogenerated />
+using System;
+using System.Reflection;
+[assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v9.0", FrameworkDisplayName = ".NET 9.0")]
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\obj\Debug\net9.0-windows\RedditVideoStudio.Infrastructure.AssemblyInfo.cs">
+<![CDATA[
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//     Runtime Version:4.0.30319.42000
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.Infrastructure")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce0e90482f46437339677ce42aeead98c2f7b972")]
+[assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.Infrastructure")]
+[assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.Infrastructure")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
+
+// Generated by the MSBuild WriteCodeFragment class.
+
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\obj\Debug\net9.0-windows\RedditVideoStudio.Infrastructure.GlobalUsings.g.cs">
+<![CDATA[
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.Drawing;
+global using global::System.IO;
+global using global::System.Linq;
+global using global::System.Net.Http;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+global using global::System.Windows.Forms;
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\obj\Debug\net9.0-windows\RedditVideoStudio.Infrastructure.sourcelink.json">
+<![CDATA[
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/ce0e90482f46437339677ce42aeead98c2f7b972/*"}}
 ]]>
 </File>
 
@@ -5046,7 +6119,7 @@ global using global::System.Threading.Tasks;
 {
   "version": 3,
   "targets": {
-    "net9.0": {
+    "net9.0-windows7.0": {
       "Azure.Core/1.44.1": {
         "type": "package",
         "dependencies": {
@@ -7281,7 +8354,7 @@ global using global::System.Threading.Tasks;
     }
   },
   "projectFileDependencyGroups": {
-    "net9.0": [
+    "net9.0-windows7.0": [
       "Google.Apis.YouTube.v3 >= 1.69.0.3764",
       "Google.Cloud.TextToSpeech.V1 >= 3.12.0",
       "Microsoft.CognitiveServices.Speech >= 1.44.0",
@@ -7316,15 +8389,15 @@ global using global::System.Threading.Tasks;
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
       "originalTargetFrameworks": [
-        "net9.0"
+        "net9.0-windows"
       ],
       "sources": {
         "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
         "https://api.nuget.org/v3/index.json": {}
       },
       "frameworks": {
-        "net9.0": {
-          "targetAlias": "net9.0",
+        "net9.0-windows7.0": {
+          "targetAlias": "net9.0-windows",
           "projectReferences": {
             "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj": {
               "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj"
@@ -7351,8 +8424,8 @@ global using global::System.Threading.Tasks;
       "SdkAnalysisLevel": "9.0.300"
     },
     "frameworks": {
-      "net9.0": {
-        "targetAlias": "net9.0",
+      "net9.0-windows7.0": {
+        "targetAlias": "net9.0-windows",
         "dependencies": {
           "Google.Apis.YouTube.v3": {
             "target": "Package",
@@ -7397,6 +8470,9 @@ global using global::System.Threading.Tasks;
         "frameworkReferences": {
           "Microsoft.NETCore.App": {
             "privateAssets": "all"
+          },
+          "Microsoft.WindowsDesktop.App.WindowsForms": {
+            "privateAssets": "none"
           }
         },
         "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.301/PortableRuntimeIdentifierGraph.json"
@@ -7577,15 +8653,15 @@ global using global::System.Threading.Tasks;
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
-          "net9.0"
+          "net9.0-windows"
         ],
         "sources": {
           "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
-          "net9.0": {
-            "targetAlias": "net9.0",
+          "net9.0-windows7.0": {
+            "targetAlias": "net9.0-windows",
             "projectReferences": {
               "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj": {
                 "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj"
@@ -7612,8 +8688,8 @@ global using global::System.Threading.Tasks;
         "SdkAnalysisLevel": "9.0.300"
       },
       "frameworks": {
-        "net9.0": {
-          "targetAlias": "net9.0",
+        "net9.0-windows7.0": {
+          "targetAlias": "net9.0-windows",
           "dependencies": {
             "Google.Apis.YouTube.v3": {
               "target": "Package",
@@ -7658,6 +8734,9 @@ global using global::System.Threading.Tasks;
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
+            },
+            "Microsoft.WindowsDesktop.App.WindowsForms": {
+              "privateAssets": "none"
             }
           },
           "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.301/PortableRuntimeIdentifierGraph.json"
@@ -9013,7 +10092,7 @@ using System;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Text.Json; // This 'using' statement is required.
+using System.Text.Json;
 
 namespace RedditVideoStudio.Infrastructure.Services
 {
@@ -9037,10 +10116,6 @@ namespace RedditVideoStudio.Infrastructure.Services
             _logger.LogInformation("Configuration reloaded from registry.");
         }
 
-        /// <summary>
-        /// This is the synchronous Save method required by the IAppConfiguration interface.
-        /// Its logic is copied from your existing SaveAsync implementation.
-        /// </summary>
         public void Save()
         {
             try
@@ -9072,10 +10147,6 @@ namespace RedditVideoStudio.Infrastructure.Services
             }
         }
 
-        /// <summary>
-        /// The asynchronous SaveAsync method now simply calls the synchronous Save method
-        /// on a background thread. This removes duplicated code.
-        /// </summary>
         public async Task SaveAsync(CancellationToken cancellationToken = default)
         {
             await Task.Run(() => Save(), cancellationToken);
@@ -9233,6 +10304,7 @@ namespace RedditVideoStudio.Infrastructure.Services
             _appConfiguration.Settings.ClipSettings = settings.ClipSettings;
             _appConfiguration.Settings.AzureTts = settings.AzureTts;
             _appConfiguration.Settings.ElevenLabs = settings.ElevenLabs;
+            _appConfiguration.Settings.EnabledDestinations = settings.EnabledDestinations;
 
             _appConfiguration.Save();
         }
@@ -9312,22 +10384,27 @@ namespace RedditVideoStudio.Infrastructure.Services
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\Services\TikTokAuthService.cs">
 <![CDATA[
-// C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\Services\TikTokAuthService.cs
 using Microsoft.Extensions.Logging;
+using RedditVideoStudio.Core.Exceptions;
 using RedditVideoStudio.Core.Interfaces;
+using System;
 using System.Diagnostics;
+using System.Drawing;
 using System.Net;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Forms;
+using System.Web;
 
 namespace RedditVideoStudio.Infrastructure.Services
 {
-    /// <summary>
-    /// A conceptual service to handle the TikTok OAuth 2.0 authorization flow.
-    /// </summary>
     public class TikTokAuthService
     {
         private readonly ILogger<TikTokAuthService> _logger;
         private readonly IAppConfiguration _config;
+        private string? _codeVerifier;
 
         public TikTokAuthService(ILogger<TikTokAuthService> logger, IAppConfiguration config)
         {
@@ -9335,35 +10412,162 @@ namespace RedditVideoStudio.Infrastructure.Services
             _config = config;
         }
 
-        public async Task<string> AuthorizeAndGetTokenAsync()
+        public Task<string> AuthorizeAndGetTokenAsync(CancellationToken cancellationToken)
         {
             var settings = _config.Settings.TikTok;
-            string redirectUri = "http://localhost:8910/callback/";
+            string redirectUri = "http://localhost:8912/callback/";
 
-            _logger.LogInformation("Starting TikTok authorization flow...");
+            _logger.LogInformation("Starting TikTok authorization flow (Manual Copy/Paste)...");
 
-            // Step 1: Launch browser for user to grant permission
-            string authUrl = $"https://www.tiktok.com/v2/auth/authorize?client_key={settings.ClientKey}&scope={settings.Scopes}&response_type=code&redirect_uri={WebUtility.UrlEncode(redirectUri)}";
-            _logger.LogInformation("Launching browser to: {AuthUrl}", authUrl);
+            _codeVerifier = GenerateCodeVerifier();
+            string codeChallenge = GenerateCodeChallenge(_codeVerifier);
+            string state = Guid.NewGuid().ToString();
+
+            var authUrlBuilder = new StringBuilder();
+            authUrlBuilder.Append("https://www.tiktok.com/v2/auth/authorize/");
+            authUrlBuilder.Append($"?client_key={settings.ClientKey}");
+            authUrlBuilder.Append($"&scope={settings.Scopes}");
+            authUrlBuilder.Append("&response_type=code");
+            authUrlBuilder.Append($"&redirect_uri={WebUtility.UrlEncode(redirectUri)}");
+            authUrlBuilder.Append($"&state={state}");
+            authUrlBuilder.Append($"&code_challenge={codeChallenge}");
+            authUrlBuilder.Append("&code_challenge_method=S256");
+
+            string authUrl = authUrlBuilder.ToString();
+            _logger.LogInformation("Launching browser to authorize...");
             Process.Start(new ProcessStartInfo(authUrl) { UseShellExecute = true });
 
-            // Step 2: Listen for the redirect containing the authorization code
-            // In a real application, this would involve a temporary HttpListener.
-            _logger.LogInformation("Listening on {RedirectUri} for authorization code...", redirectUri);
+            string? callbackUrl = ShowUrlInputDialog();
 
-            // This is a placeholder for the logic that would capture the auth code.
-            string authCode = "placeholder_auth_code_from_tiktok";
-            await Task.Delay(1000); // Simulate waiting for user
-            _logger.LogInformation("Received authorization code: {AuthCode}", authCode);
+            if (string.IsNullOrWhiteSpace(callbackUrl))
+            {
+                throw new OperationCanceledException("TikTok authentication was canceled.");
+            }
 
-            // Step 3: Exchange the authorization code for an access token
-            // This would be a real HttpClient POST request to TikTok's token endpoint.
-            _logger.LogInformation("Exchanging authorization code for an access token...");
-            await Task.Delay(1000); // Simulate network request
+            var query = new Uri(callbackUrl).Query;
+            var queryParams = HttpUtility.ParseQueryString(query);
+            string? authCode = queryParams.Get("code");
+            string? incomingState = queryParams.Get("state");
+
+            if (string.IsNullOrEmpty(authCode) || incomingState != state)
+            {
+                _logger.LogError("TikTok authorization failed. Code or state mismatch.");
+                throw new ApiException("TikTok authorization failed. The code or state was invalid.");
+            }
+
+            _logger.LogInformation("Received authorization code successfully.");
 
             string accessToken = "placeholder_access_token_from_tiktok";
-            _logger.LogInformation("Successfully obtained TikTok access token.");
-            return accessToken;
+            _logger.LogInformation("Successfully obtained TikTok access token (placeholder).");
+            return Task.FromResult(accessToken);
+        }
+
+        private string? ShowUrlInputDialog()
+        {
+            using (var form = new Form())
+            {
+                form.Text = "Paste Callback URL";
+                form.Size = new Size(500, 180);
+                form.StartPosition = FormStartPosition.CenterScreen;
+                form.FormBorderStyle = FormBorderStyle.FixedDialog;
+                form.TopMost = true;
+
+                var label = new Label() { Left = 20, Top = 20, Width = 440, Text = "After authorizing in your browser, copy the full URL from the address bar (it will show an error page) and paste it below." };
+                var textBox = new TextBox() { Left = 20, Top = 60, Width = 440 };
+                var buttonOk = new Button() { Text = "OK", Left = 300, Width = 100, Top = 90, DialogResult = DialogResult.OK };
+                var buttonCancel = new Button() { Text = "Cancel", Left = 40, Width = 100, Top = 90, DialogResult = DialogResult.Cancel };
+
+                form.Controls.Add(label);
+                form.Controls.Add(textBox);
+                form.Controls.Add(buttonOk);
+                form.Controls.Add(buttonCancel);
+
+                form.AcceptButton = buttonOk;
+                form.CancelButton = buttonCancel;
+
+                if (form.ShowDialog() == DialogResult.OK)
+                {
+                    return textBox.Text;
+                }
+                return null;
+            }
+        }
+
+        private string GenerateCodeVerifier()
+        {
+            var randomBytes = new byte[32];
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(randomBytes);
+            }
+            return Convert.ToBase64String(randomBytes)
+                .TrimEnd('=')
+                .Replace('+', '-')
+                .Replace('/', '_');
+        }
+
+        private string GenerateCodeChallenge(string codeVerifier)
+        {
+            using (var sha256 = SHA256.Create())
+            {
+                var challengeBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(codeVerifier));
+                return Convert.ToBase64String(challengeBytes)
+                    .TrimEnd('=')
+                    .Replace('+', '-')
+                    .Replace('/', '_');
+            }
+        }
+    }
+}
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\Services\TikTokDestination.cs">
+<![CDATA[
+using RedditVideoStudio.Core.Interfaces;
+using RedditVideoStudio.Domain.Models;
+using System.Threading.Tasks;
+using System.Threading;
+using System;
+
+namespace RedditVideoStudio.Infrastructure.Services
+{
+    public class TikTokDestination : IVideoDestination
+    {
+        private readonly TikTokAuthService _authService;
+        private readonly ITikTokServiceFactory _tikTokServiceFactory;
+        private string? _accessToken;
+
+        public string Name => "TikTok";
+        public bool IsAuthenticated => !string.IsNullOrEmpty(_accessToken);
+
+        public TikTokDestination(TikTokAuthService authService, ITikTokServiceFactory tikTokServiceFactory)
+        {
+            _authService = authService;
+            _tikTokServiceFactory = tikTokServiceFactory;
+        }
+
+        public async Task AuthenticateAsync(CancellationToken cancellationToken = default)
+        {
+            // Pass the cancellationToken to the authorization method
+            _accessToken = await _authService.AuthorizeAndGetTokenAsync(cancellationToken);
+        }
+
+        public Task SignOutAsync()
+        {
+            _accessToken = null;
+            return Task.CompletedTask;
+        }
+
+        public Task UploadVideoAsync(string videoPath, VideoDetails videoDetails, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(_accessToken))
+            {
+                throw new InvalidOperationException("Not authenticated with TikTok.");
+            }
+            var uploader = _tikTokServiceFactory.Create(_accessToken);
+            return uploader.UploadVideoAsync(videoPath, videoDetails.Title, cancellationToken);
         }
     }
 }
@@ -9373,7 +10577,6 @@ namespace RedditVideoStudio.Infrastructure.Services
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\Services\TikTokServiceFactory.cs">
 <![CDATA[
-// C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\Services\TikTokServiceFactory.cs
 using Microsoft.Extensions.Logging;
 using RedditVideoStudio.Core.Interfaces;
 
@@ -9410,7 +10613,6 @@ namespace RedditVideoStudio.Infrastructure.Services
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\Services\TikTokUploader.cs">
 <![CDATA[
-// C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\Services\TikTokUploader.cs
 using Microsoft.Extensions.Logging;
 using RedditVideoStudio.Core.Interfaces;
 using System.IO;
@@ -9812,7 +11014,8 @@ using System.Diagnostics.CodeAnalysis;
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
@@ -9834,7 +11037,6 @@ using System.Diagnostics.CodeAnalysis;
   </ItemGroup>
 
 </Project>
-
 ]]>
 </File>
 
@@ -9870,12 +11072,10 @@ using System.Diagnostics.CodeAnalysis;
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Shared\Configuration\AppSettings.cs">
 <![CDATA[
-// C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Shared\Configuration\AppSettings.cs
+using System.Collections.Generic;
+
 namespace RedditVideoStudio.Shared.Configuration
 {
-    /// <summary>
-    /// A container for all application settings, organized by feature area.
-    /// </summary>
     public class AppSettings
     {
         public RedditSettings Reddit { get; set; } = new();
@@ -9888,9 +11088,8 @@ namespace RedditVideoStudio.Shared.Configuration
         public ClipSettings ClipSettings { get; set; } = new();
         public AzureTtsSettings AzureTts { get; set; } = new();
         public ElevenLabsSettings ElevenLabs { get; set; } = new();
-
-        // New property for TikTok settings
         public TikTokSettings TikTok { get; set; } = new();
+        public Dictionary<string, bool> EnabledDestinations { get; set; } = new();
     }
 }
 ]]>
@@ -9971,14 +11170,17 @@ namespace RedditVideoStudio.Shared.Configuration
     public class FfmpegSettings
     {
         /// <summary>
+        /// The orientation of the output video. Can be "Landscape" or "Portrait".
+        /// </summary>
+        public string VideoOrientation { get; set; } = "Landscape";
+
+        /// <summary>
         /// The directory containing ffmpeg.exe and ffprobe.exe, relative to the application's startup directory.
         /// </summary>
         public string FfmpegDirectory { get; set; } = "ffmpeg";
 
         public string VideoCodec { get; set; } = "libx264";
 
-        // CORRECTED: Changed the default audio codec to 'libmp3lame',
-        // which is the standard encoder for the .mp3 file format.
         public string AudioCodec { get; set; } = "libmp3lame";
 
         public string Preset { get; set; } = "ultrafast";
@@ -10093,7 +11295,6 @@ namespace RedditVideoStudio.Shared.Configuration
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Shared\Configuration\TikTokSettings.cs">
 <![CDATA[
-// C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Shared\Configuration\TikTokSettings.cs
 namespace RedditVideoStudio.Shared.Configuration
 {
     /// <summary>
@@ -10216,7 +11417,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.Shared")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a169e534e48d0dc4efce3153a53593cbda7d5622")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce0e90482f46437339677ce42aeead98c2f7b972")]
 [assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.Shared")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.Shared")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
@@ -10245,7 +11446,7 @@ global using global::System.Threading.Tasks;
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Shared\obj\Debug\net9.0\RedditVideoStudio.Shared.sourcelink.json">
 <![CDATA[
-{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/a169e534e48d0dc4efce3153a53593cbda7d5622/*"}}
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/ce0e90482f46437339677ce42aeead98c2f7b972/*"}}
 ]]>
 </File>
 
@@ -12497,7 +13698,7 @@ namespace RedditVideoStudio.UI.Logging
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\Views\DestinationsSettingsView.g.cs">
 <![CDATA[
-#pragma checksum "..\..\..\..\Views\DestinationsSettingsView.xaml" "{ff1816ec-aa5e-4d10-87f7-6f4963833460}" "A8E906FF571C1E8461D6BA426CB3FD092E21AA4C"
+#pragma checksum "..\..\..\..\Views\DestinationsSettingsView.xaml" "{ff1816ec-aa5e-4d10-87f7-6f4963833460}" "B42F8F658D712CBD71400845E0A2A93402DEA9B0"
 //------------------------------------------------------------------------------
 // <auto-generated>
 //     This code was generated by a tool.
@@ -12580,7 +13781,7 @@ namespace RedditVideoStudio.UI.Views.Settings {
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\Views\DestinationsSettingsView.g.i.cs">
 <![CDATA[
-#pragma checksum "..\..\..\..\Views\DestinationsSettingsView.xaml" "{ff1816ec-aa5e-4d10-87f7-6f4963833460}" "A8E906FF571C1E8461D6BA426CB3FD092E21AA4C"
+#pragma checksum "..\..\..\..\Views\DestinationsSettingsView.xaml" "{ff1816ec-aa5e-4d10-87f7-6f4963833460}" "B42F8F658D712CBD71400845E0A2A93402DEA9B0"
 //------------------------------------------------------------------------------
 // <auto-generated>
 //     This code was generated by a tool.
@@ -12830,67 +14031,7 @@ namespace RedditVideoStudio.UI {
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\GeneratedInternalTypeHelper.g.cs">
 <![CDATA[
-//------------------------------------------------------------------------------
-// <auto-generated>
-//     This code was generated by a tool.
-//     Runtime Version:4.0.30319.42000
-//
-//     Changes to this file may cause incorrect behavior and will be lost if
-//     the code is regenerated.
-// </auto-generated>
-//------------------------------------------------------------------------------
 
-namespace XamlGeneratedNamespace {
-    
-    
-    /// <summary>
-    /// GeneratedInternalTypeHelper
-    /// </summary>
-    [System.Diagnostics.DebuggerNonUserCodeAttribute()]
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("PresentationBuildTasks", "9.0.6.0")]
-    [System.ComponentModel.EditorBrowsableAttribute(System.ComponentModel.EditorBrowsableState.Never)]
-    public sealed class GeneratedInternalTypeHelper : System.Windows.Markup.InternalTypeHelper {
-        
-        /// <summary>
-        /// CreateInstance
-        /// </summary>
-        protected override object CreateInstance(System.Type type, System.Globalization.CultureInfo culture) {
-            return System.Activator.CreateInstance(type, ((System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic) 
-                            | (System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.CreateInstance)), null, null, culture);
-        }
-        
-        /// <summary>
-        /// GetPropertyValue
-        /// </summary>
-        protected override object GetPropertyValue(System.Reflection.PropertyInfo propertyInfo, object target, System.Globalization.CultureInfo culture) {
-            return propertyInfo.GetValue(target, System.Reflection.BindingFlags.Default, null, null, culture);
-        }
-        
-        /// <summary>
-        /// SetPropertyValue
-        /// </summary>
-        protected override void SetPropertyValue(System.Reflection.PropertyInfo propertyInfo, object target, object value, System.Globalization.CultureInfo culture) {
-            propertyInfo.SetValue(target, value, System.Reflection.BindingFlags.Default, null, null, culture);
-        }
-        
-        /// <summary>
-        /// CreateDelegate
-        /// </summary>
-        protected override System.Delegate CreateDelegate(System.Type delegateType, object target, string handler) {
-            return ((System.Delegate)(target.GetType().InvokeMember("_CreateDelegate", (System.Reflection.BindingFlags.InvokeMethod 
-                            | (System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)), null, target, new object[] {
-                        delegateType,
-                        handler}, null)));
-        }
-        
-        /// <summary>
-        /// AddEventHandler
-        /// </summary>
-        protected override void AddEventHandler(System.Reflection.EventInfo eventInfo, object target, System.Delegate handler) {
-            eventInfo.AddEventHandler(target, handler);
-        }
-    }
-}
 
 
 ]]>
@@ -13398,7 +14539,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.UI")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+26c828d0bf8d218b9595990dd6eb17872c650dbc")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce0e90482f46437339677ce42aeead98c2f7b972")]
 [assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.UI")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.UI")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
@@ -15164,7 +16305,7 @@ global using global::System.Threading.Tasks;
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI.sourcelink.json">
 <![CDATA[
-{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/26c828d0bf8d218b9595990dd6eb17872c650dbc/*"}}
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/ce0e90482f46437339677ce42aeead98c2f7b972/*"}}
 ]]>
 </File>
 
@@ -15273,6 +16414,110 @@ global using global::System.Threading.Tasks;
 </File>
 
 
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_4sdec0bz_wpftmp.AssemblyInfo.cs">
+<![CDATA[
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//     Runtime Version:4.0.30319.42000
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce0e90482f46437339677ce42aeead98c2f7b972")]
+[assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
+
+// Generated by the MSBuild WriteCodeFragment class.
+
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_4sdec0bz_wpftmp.GlobalUsings.g.cs">
+<![CDATA[
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.Linq;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_4sdec0bz_wpftmp.sourcelink.json">
+<![CDATA[
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/ce0e90482f46437339677ce42aeead98c2f7b972/*"}}
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_5tuhynvy_wpftmp.AssemblyInfo.cs">
+<![CDATA[
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//     Runtime Version:4.0.30319.42000
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce0e90482f46437339677ce42aeead98c2f7b972")]
+[assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
+
+// Generated by the MSBuild WriteCodeFragment class.
+
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_5tuhynvy_wpftmp.GlobalUsings.g.cs">
+<![CDATA[
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.Linq;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_5tuhynvy_wpftmp.sourcelink.json">
+<![CDATA[
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/ce0e90482f46437339677ce42aeead98c2f7b972/*"}}
+]]>
+</File>
+
+
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_akfdv21n_wpftmp.AssemblyInfo.cs">
 <![CDATA[
 //------------------------------------------------------------------------------
@@ -15321,6 +16566,58 @@ global using global::System.Threading.Tasks;
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_akfdv21n_wpftmp.sourcelink.json">
 <![CDATA[
 {"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/a169e534e48d0dc4efce3153a53593cbda7d5622/*"}}
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_btkt3lvz_wpftmp.AssemblyInfo.cs">
+<![CDATA[
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//     Runtime Version:4.0.30319.42000
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce0e90482f46437339677ce42aeead98c2f7b972")]
+[assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
+
+// Generated by the MSBuild WriteCodeFragment class.
+
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_btkt3lvz_wpftmp.GlobalUsings.g.cs">
+<![CDATA[
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.Linq;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_btkt3lvz_wpftmp.sourcelink.json">
+<![CDATA[
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/ce0e90482f46437339677ce42aeead98c2f7b972/*"}}
 ]]>
 </File>
 
@@ -15683,6 +16980,58 @@ global using global::System.Threading.Tasks;
 </File>
 
 
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_izo41zi0_wpftmp.AssemblyInfo.cs">
+<![CDATA[
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//     Runtime Version:4.0.30319.42000
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce0e90482f46437339677ce42aeead98c2f7b972")]
+[assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
+
+// Generated by the MSBuild WriteCodeFragment class.
+
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_izo41zi0_wpftmp.GlobalUsings.g.cs">
+<![CDATA[
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.Linq;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_izo41zi0_wpftmp.sourcelink.json">
+<![CDATA[
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/ce0e90482f46437339677ce42aeead98c2f7b972/*"}}
+]]>
+</File>
+
+
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_jewznt2u_wpftmp.AssemblyInfo.cs">
 <![CDATA[
 //------------------------------------------------------------------------------
@@ -15735,6 +17084,110 @@ global using global::System.Threading.Tasks;
 </File>
 
 
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_kenzvrxu_wpftmp.AssemblyInfo.cs">
+<![CDATA[
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//     Runtime Version:4.0.30319.42000
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce0e90482f46437339677ce42aeead98c2f7b972")]
+[assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
+
+// Generated by the MSBuild WriteCodeFragment class.
+
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_kenzvrxu_wpftmp.GlobalUsings.g.cs">
+<![CDATA[
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.Linq;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_kenzvrxu_wpftmp.sourcelink.json">
+<![CDATA[
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/ce0e90482f46437339677ce42aeead98c2f7b972/*"}}
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_kq1z0jvp_wpftmp.AssemblyInfo.cs">
+<![CDATA[
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//     Runtime Version:4.0.30319.42000
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+26c828d0bf8d218b9595990dd6eb17872c650dbc")]
+[assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
+
+// Generated by the MSBuild WriteCodeFragment class.
+
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_kq1z0jvp_wpftmp.GlobalUsings.g.cs">
+<![CDATA[
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.Linq;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_kq1z0jvp_wpftmp.sourcelink.json">
+<![CDATA[
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/26c828d0bf8d218b9595990dd6eb17872c650dbc/*"}}
+]]>
+</File>
+
+
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_l0othnjh_wpftmp.AssemblyInfo.cs">
 <![CDATA[
 //------------------------------------------------------------------------------
@@ -15783,6 +17236,110 @@ global using global::System.Threading.Tasks;
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_l0othnjh_wpftmp.sourcelink.json">
 <![CDATA[
 {"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/a169e534e48d0dc4efce3153a53593cbda7d5622/*"}}
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_m1w3eizv_wpftmp.AssemblyInfo.cs">
+<![CDATA[
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//     Runtime Version:4.0.30319.42000
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce0e90482f46437339677ce42aeead98c2f7b972")]
+[assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
+
+// Generated by the MSBuild WriteCodeFragment class.
+
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_m1w3eizv_wpftmp.GlobalUsings.g.cs">
+<![CDATA[
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.Linq;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_m1w3eizv_wpftmp.sourcelink.json">
+<![CDATA[
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/ce0e90482f46437339677ce42aeead98c2f7b972/*"}}
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_m4tremp1_wpftmp.AssemblyInfo.cs">
+<![CDATA[
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//     Runtime Version:4.0.30319.42000
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+26c828d0bf8d218b9595990dd6eb17872c650dbc")]
+[assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
+
+// Generated by the MSBuild WriteCodeFragment class.
+
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_m4tremp1_wpftmp.GlobalUsings.g.cs">
+<![CDATA[
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.Linq;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_m4tremp1_wpftmp.sourcelink.json">
+<![CDATA[
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/26c828d0bf8d218b9595990dd6eb17872c650dbc/*"}}
 ]]>
 </File>
 
@@ -15887,6 +17444,58 @@ global using global::System.Threading.Tasks;
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_nyriuyef_wpftmp.sourcelink.json">
 <![CDATA[
 {"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/a169e534e48d0dc4efce3153a53593cbda7d5622/*"}}
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_o3o4gv1p_wpftmp.AssemblyInfo.cs">
+<![CDATA[
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//     Runtime Version:4.0.30319.42000
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce0e90482f46437339677ce42aeead98c2f7b972")]
+[assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
+
+// Generated by the MSBuild WriteCodeFragment class.
+
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_o3o4gv1p_wpftmp.GlobalUsings.g.cs">
+<![CDATA[
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.Linq;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_o3o4gv1p_wpftmp.sourcelink.json">
+<![CDATA[
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/ce0e90482f46437339677ce42aeead98c2f7b972/*"}}
 ]]>
 </File>
 
@@ -16043,6 +17652,58 @@ global using global::System.Threading.Tasks;
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_pajoxvxf_wpftmp.sourcelink.json">
 <![CDATA[
 {"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/a169e534e48d0dc4efce3153a53593cbda7d5622/*"}}
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_pkunvkkr_wpftmp.AssemblyInfo.cs">
+<![CDATA[
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//     Runtime Version:4.0.30319.42000
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce0e90482f46437339677ce42aeead98c2f7b972")]
+[assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
+
+// Generated by the MSBuild WriteCodeFragment class.
+
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_pkunvkkr_wpftmp.GlobalUsings.g.cs">
+<![CDATA[
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.Linq;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_pkunvkkr_wpftmp.sourcelink.json">
+<![CDATA[
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/ce0e90482f46437339677ce42aeead98c2f7b972/*"}}
 ]]>
 </File>
 
@@ -16307,6 +17968,58 @@ global using global::System.Threading.Tasks;
 </File>
 
 
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_rc1pn4wt_wpftmp.AssemblyInfo.cs">
+<![CDATA[
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//     Runtime Version:4.0.30319.42000
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce0e90482f46437339677ce42aeead98c2f7b972")]
+[assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
+
+// Generated by the MSBuild WriteCodeFragment class.
+
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_rc1pn4wt_wpftmp.GlobalUsings.g.cs">
+<![CDATA[
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.Linq;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_rc1pn4wt_wpftmp.sourcelink.json">
+<![CDATA[
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/ce0e90482f46437339677ce42aeead98c2f7b972/*"}}
+]]>
+</File>
+
+
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_rmn2bqu0_wpftmp.AssemblyInfo.cs">
 <![CDATA[
 //------------------------------------------------------------------------------
@@ -16359,6 +18072,58 @@ global using global::System.Threading.Tasks;
 </File>
 
 
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_sspsluhp_wpftmp.AssemblyInfo.cs">
+<![CDATA[
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//     Runtime Version:4.0.30319.42000
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce0e90482f46437339677ce42aeead98c2f7b972")]
+[assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
+
+// Generated by the MSBuild WriteCodeFragment class.
+
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_sspsluhp_wpftmp.GlobalUsings.g.cs">
+<![CDATA[
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.Linq;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_sspsluhp_wpftmp.sourcelink.json">
+<![CDATA[
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/ce0e90482f46437339677ce42aeead98c2f7b972/*"}}
+]]>
+</File>
+
+
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_tjmk0ktt_wpftmp.AssemblyInfo.cs">
 <![CDATA[
 //------------------------------------------------------------------------------
@@ -16407,6 +18172,58 @@ global using global::System.Threading.Tasks;
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_tjmk0ktt_wpftmp.sourcelink.json">
 <![CDATA[
 {"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/a169e534e48d0dc4efce3153a53593cbda7d5622/*"}}
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_tjrxuw11_wpftmp.AssemblyInfo.cs">
+<![CDATA[
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//     Runtime Version:4.0.30319.42000
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce0e90482f46437339677ce42aeead98c2f7b972")]
+[assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
+
+// Generated by the MSBuild WriteCodeFragment class.
+
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_tjrxuw11_wpftmp.GlobalUsings.g.cs">
+<![CDATA[
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.Linq;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_tjrxuw11_wpftmp.sourcelink.json">
+<![CDATA[
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/ce0e90482f46437339677ce42aeead98c2f7b972/*"}}
 ]]>
 </File>
 
@@ -16667,6 +18484,58 @@ global using global::System.Threading.Tasks;
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_xks1au1a_wpftmp.sourcelink.json">
 <![CDATA[
 {"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/a169e534e48d0dc4efce3153a53593cbda7d5622/*"}}
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_xmqb0ekk_wpftmp.AssemblyInfo.cs">
+<![CDATA[
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//     Runtime Version:4.0.30319.42000
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+26c828d0bf8d218b9595990dd6eb17872c650dbc")]
+[assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
+
+// Generated by the MSBuild WriteCodeFragment class.
+
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_xmqb0ekk_wpftmp.GlobalUsings.g.cs">
+<![CDATA[
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.Linq;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_xmqb0ekk_wpftmp.sourcelink.json">
+<![CDATA[
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/26c828d0bf8d218b9595990dd6eb17872c650dbc/*"}}
 ]]>
 </File>
 
@@ -18751,7 +20620,10 @@ namespace RedditVideoStudio.UI {
         },
         "runtime": {
           "bin/placeholder/RedditVideoStudio.Infrastructure.dll": {}
-        }
+        },
+        "frameworkReferences": [
+          "Microsoft.WindowsDesktop.App.WindowsForms"
+        ]
       },
       "RedditVideoStudio.Shared/1.0.0": {
         "type": "project",
@@ -21395,15 +23267,15 @@ namespace RedditVideoStudio.UI {
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
-          "net9.0"
+          "net9.0-windows"
         ],
         "sources": {
           "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
-          "net9.0": {
-            "targetAlias": "net9.0",
+          "net9.0-windows7.0": {
+            "targetAlias": "net9.0-windows",
             "projectReferences": {
               "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj": {
                 "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj"
@@ -21430,8 +23302,8 @@ namespace RedditVideoStudio.UI {
         "SdkAnalysisLevel": "9.0.300"
       },
       "frameworks": {
-        "net9.0": {
-          "targetAlias": "net9.0",
+        "net9.0-windows7.0": {
+          "targetAlias": "net9.0-windows",
           "dependencies": {
             "Google.Apis.YouTube.v3": {
               "target": "Package",
@@ -21476,6 +23348,9 @@ namespace RedditVideoStudio.UI {
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
+            },
+            "Microsoft.WindowsDesktop.App.WindowsForms": {
+              "privateAssets": "none"
             }
           },
           "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.301/PortableRuntimeIdentifierGraph.json"
@@ -24068,6 +25943,1049 @@ namespace RedditVideoStudio.UI {
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.301/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj",
+        "projectName": "RedditVideoStudio.Shared",
+        "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj",
+        "packagesPath": "C:\\Users\\Dean Kruger\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\Dean Kruger\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.301/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.UI\\RedditVideoStudio.UI.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.UI\\RedditVideoStudio.UI.csproj",
+        "projectName": "RedditVideoStudio.UI",
+        "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.UI\\RedditVideoStudio.UI.csproj",
+        "packagesPath": "C:\\Users\\Dean Kruger\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.UI\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\Dean Kruger\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0-windows"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0-windows7.0": {
+            "targetAlias": "net9.0-windows",
+            "projectReferences": {
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Application\\RedditVideoStudio.Application.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Application\\RedditVideoStudio.Application.csproj"
+              },
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj"
+              },
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Infrastructure\\RedditVideoStudio.Infrastructure.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Infrastructure\\RedditVideoStudio.Infrastructure.csproj"
+              },
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0-windows7.0": {
+          "targetAlias": "net9.0-windows",
+          "dependencies": {
+            "CommunityToolkit.Mvvm": {
+              "target": "Package",
+              "version": "[8.4.0, )"
+            },
+            "MediatR": {
+              "target": "Package",
+              "version": "[12.5.0, )"
+            },
+            "Microsoft.Extensions.Hosting": {
+              "target": "Package",
+              "version": "[9.0.6, )"
+            },
+            "Serilog.Extensions.Hosting": {
+              "target": "Package",
+              "version": "[9.0.0, )"
+            },
+            "Serilog.Sinks.File": {
+              "target": "Package",
+              "version": "[7.0.0, )"
+            },
+            "SkiaSharp": {
+              "target": "Package",
+              "version": "[3.119.0, )"
+            },
+            "SkiaSharp.NativeAssets.Win32": {
+              "target": "Package",
+              "version": "[3.119.0, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            },
+            "Microsoft.WindowsDesktop.App.WPF": {
+              "privateAssets": "none"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.301/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\RedditVideoStudio.UI_kq1z0jvp_wpftmp.csproj.nuget.dgspec.json">
+<![CDATA[
+{
+  "format": 1,
+  "restore": {
+    "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.UI\\RedditVideoStudio.UI.csproj": {}
+  },
+  "projects": {
+    "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Application\\RedditVideoStudio.Application.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Application\\RedditVideoStudio.Application.csproj",
+        "projectName": "RedditVideoStudio.Application",
+        "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Application\\RedditVideoStudio.Application.csproj",
+        "packagesPath": "C:\\Users\\Dean Kruger\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Application\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\Dean Kruger\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj"
+              },
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "Google.Apis.YouTube.v3": {
+              "target": "Package",
+              "version": "[1.69.0.3764, )"
+            },
+            "Microsoft.Extensions.Logging.Abstractions": {
+              "target": "Package",
+              "version": "[9.0.6, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.301/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj",
+        "projectName": "RedditVideoStudio.Core",
+        "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj",
+        "packagesPath": "C:\\Users\\Dean Kruger\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\Dean Kruger\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Domain\\RedditVideoStudio.Domain.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Domain\\RedditVideoStudio.Domain.csproj"
+              },
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "Google.Apis.Auth": {
+              "target": "Package",
+              "version": "[1.70.0, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.301/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Domain\\RedditVideoStudio.Domain.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Domain\\RedditVideoStudio.Domain.csproj",
+        "projectName": "RedditVideoStudio.Domain",
+        "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Domain\\RedditVideoStudio.Domain.csproj",
+        "packagesPath": "C:\\Users\\Dean Kruger\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Domain\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\Dean Kruger\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.301/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Infrastructure\\RedditVideoStudio.Infrastructure.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Infrastructure\\RedditVideoStudio.Infrastructure.csproj",
+        "projectName": "RedditVideoStudio.Infrastructure",
+        "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Infrastructure\\RedditVideoStudio.Infrastructure.csproj",
+        "packagesPath": "C:\\Users\\Dean Kruger\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Infrastructure\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\Dean Kruger\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj"
+              },
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Domain\\RedditVideoStudio.Domain.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Domain\\RedditVideoStudio.Domain.csproj"
+              },
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "Google.Apis.YouTube.v3": {
+              "target": "Package",
+              "version": "[1.69.0.3764, )"
+            },
+            "Google.Cloud.TextToSpeech.V1": {
+              "target": "Package",
+              "version": "[3.12.0, )"
+            },
+            "Microsoft.CognitiveServices.Speech": {
+              "target": "Package",
+              "version": "[1.44.0, )"
+            },
+            "Microsoft.Extensions.Logging.Abstractions": {
+              "target": "Package",
+              "version": "[9.0.6, )"
+            },
+            "Newtonsoft.Json": {
+              "target": "Package",
+              "version": "[13.0.3, )"
+            },
+            "SkiaSharp": {
+              "target": "Package",
+              "version": "[3.119.0, )"
+            },
+            "System.Speech": {
+              "target": "Package",
+              "version": "[9.0.6, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.301/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj",
+        "projectName": "RedditVideoStudio.Shared",
+        "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj",
+        "packagesPath": "C:\\Users\\Dean Kruger\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\Dean Kruger\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.301/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.UI\\RedditVideoStudio.UI.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.UI\\RedditVideoStudio.UI.csproj",
+        "projectName": "RedditVideoStudio.UI",
+        "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.UI\\RedditVideoStudio.UI.csproj",
+        "packagesPath": "C:\\Users\\Dean Kruger\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.UI\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\Dean Kruger\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0-windows"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0-windows7.0": {
+            "targetAlias": "net9.0-windows",
+            "projectReferences": {
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Application\\RedditVideoStudio.Application.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Application\\RedditVideoStudio.Application.csproj"
+              },
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj"
+              },
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Infrastructure\\RedditVideoStudio.Infrastructure.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Infrastructure\\RedditVideoStudio.Infrastructure.csproj"
+              },
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0-windows7.0": {
+          "targetAlias": "net9.0-windows",
+          "dependencies": {
+            "CommunityToolkit.Mvvm": {
+              "target": "Package",
+              "version": "[8.4.0, )"
+            },
+            "MediatR": {
+              "target": "Package",
+              "version": "[12.5.0, )"
+            },
+            "Microsoft.Extensions.Hosting": {
+              "target": "Package",
+              "version": "[9.0.6, )"
+            },
+            "Serilog.Extensions.Hosting": {
+              "target": "Package",
+              "version": "[9.0.0, )"
+            },
+            "Serilog.Sinks.File": {
+              "target": "Package",
+              "version": "[7.0.0, )"
+            },
+            "SkiaSharp": {
+              "target": "Package",
+              "version": "[3.119.0, )"
+            },
+            "SkiaSharp.NativeAssets.Win32": {
+              "target": "Package",
+              "version": "[3.119.0, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            },
+            "Microsoft.WindowsDesktop.App.WPF": {
+              "privateAssets": "none"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.301/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\RedditVideoStudio.UI_m1w3eizv_wpftmp.csproj.nuget.dgspec.json">
+<![CDATA[
+{
+  "format": 1,
+  "restore": {
+    "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.UI\\RedditVideoStudio.UI.csproj": {}
+  },
+  "projects": {
+    "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Application\\RedditVideoStudio.Application.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Application\\RedditVideoStudio.Application.csproj",
+        "projectName": "RedditVideoStudio.Application",
+        "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Application\\RedditVideoStudio.Application.csproj",
+        "packagesPath": "C:\\Users\\Dean Kruger\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Application\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\Dean Kruger\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj"
+              },
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "Google.Apis.YouTube.v3": {
+              "target": "Package",
+              "version": "[1.69.0.3764, )"
+            },
+            "Microsoft.Extensions.Logging.Abstractions": {
+              "target": "Package",
+              "version": "[9.0.6, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.301/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj",
+        "projectName": "RedditVideoStudio.Core",
+        "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj",
+        "packagesPath": "C:\\Users\\Dean Kruger\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\Dean Kruger\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Domain\\RedditVideoStudio.Domain.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Domain\\RedditVideoStudio.Domain.csproj"
+              },
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "Google.Apis.Auth": {
+              "target": "Package",
+              "version": "[1.70.0, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.301/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Domain\\RedditVideoStudio.Domain.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Domain\\RedditVideoStudio.Domain.csproj",
+        "projectName": "RedditVideoStudio.Domain",
+        "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Domain\\RedditVideoStudio.Domain.csproj",
+        "packagesPath": "C:\\Users\\Dean Kruger\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Domain\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\Dean Kruger\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.301/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Infrastructure\\RedditVideoStudio.Infrastructure.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Infrastructure\\RedditVideoStudio.Infrastructure.csproj",
+        "projectName": "RedditVideoStudio.Infrastructure",
+        "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Infrastructure\\RedditVideoStudio.Infrastructure.csproj",
+        "packagesPath": "C:\\Users\\Dean Kruger\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Infrastructure\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\Dean Kruger\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0-windows"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0-windows7.0": {
+            "targetAlias": "net9.0-windows",
+            "projectReferences": {
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Core\\RedditVideoStudio.Core.csproj"
+              },
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Domain\\RedditVideoStudio.Domain.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Domain\\RedditVideoStudio.Domain.csproj"
+              },
+              "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj": {
+                "projectPath": "C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\RedditVideoStudio.Shared\\RedditVideoStudio.Shared.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0-windows7.0": {
+          "targetAlias": "net9.0-windows",
+          "dependencies": {
+            "Google.Apis.YouTube.v3": {
+              "target": "Package",
+              "version": "[1.69.0.3764, )"
+            },
+            "Google.Cloud.TextToSpeech.V1": {
+              "target": "Package",
+              "version": "[3.12.0, )"
+            },
+            "Microsoft.CognitiveServices.Speech": {
+              "target": "Package",
+              "version": "[1.44.0, )"
+            },
+            "Microsoft.Extensions.Logging.Abstractions": {
+              "target": "Package",
+              "version": "[9.0.6, )"
+            },
+            "Newtonsoft.Json": {
+              "target": "Package",
+              "version": "[13.0.3, )"
+            },
+            "SkiaSharp": {
+              "target": "Package",
+              "version": "[3.119.0, )"
+            },
+            "System.Speech": {
+              "target": "Package",
+              "version": "[9.0.6, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            },
+            "Microsoft.WindowsDesktop.App.WindowsForms": {
+              "privateAssets": "none"
             }
           },
           "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.301/PortableRuntimeIdentifierGraph.json"
@@ -32094,28 +35012,19 @@ using System.Threading.Tasks;
 
 namespace RedditVideoStudio.UI.ViewModels.Settings
 {
-    /// <summary>
-    /// Represents a single destination platform (e.g., YouTube) in the UI.
-    /// This class acts as a wrapper around an IVideoDestination service,
-    /// providing properties and commands for a View to bind to.
-    /// </summary>
     public partial class DestinationViewModel : ObservableObject
     {
         private readonly IVideoDestination _destination;
 
-        /// <summary>
-        /// The display name of the destination platform.
-        /// </summary>
         public string Name => _destination.Name;
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(IsDisconnected))]
         private bool _isAuthenticated;
 
-        /// <summary>
-        /// A computed property that is the opposite of IsAuthenticated.
-        /// Useful for binding the visibility of a "Connect" button.
-        /// </summary>
+        [ObservableProperty]
+        private bool _isEnabled;
+
         public bool IsDisconnected => !IsAuthenticated;
 
         [ObservableProperty]
@@ -32124,8 +35033,8 @@ namespace RedditVideoStudio.UI.ViewModels.Settings
         public DestinationViewModel(IVideoDestination destination)
         {
             _destination = destination;
-            // Initialize the authentication status from the service
             _isAuthenticated = _destination.IsAuthenticated;
+            _isEnabled = false; // Default to disabled
         }
 
         [RelayCommand]
@@ -32139,7 +35048,6 @@ namespace RedditVideoStudio.UI.ViewModels.Settings
             }
             catch
             {
-                // The service itself will log the error. We just need to handle the UI state.
                 IsAuthenticated = false;
             }
             finally
@@ -32352,7 +35260,7 @@ namespace RedditVideoStudio.UI.ViewModels
     <Grid>
         <StackPanel Margin="20">
             <TextBlock Text="Platform Destinations" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,20"/>
-            <TextBlock Text="Connect your accounts to enable uploading to different platforms." Opacity="0.7" Margin="0,0,0,20" TextWrapping="Wrap"/>
+            <TextBlock Text="Connect your accounts and enable the platforms you want to publish to." Opacity="0.7" Margin="0,0,0,20" TextWrapping="Wrap"/>
 
             <ItemsControl ItemsSource="{Binding Destinations}">
                 <ItemsControl.ItemTemplate>
@@ -32361,11 +35269,14 @@ namespace RedditVideoStudio.UI.ViewModels
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
 
-                                <Ellipse Width="15" Height="15" Margin="0,0,15,0" VerticalAlignment="Center">
+                                <CheckBox Grid.Column="0" IsChecked="{Binding IsEnabled}" VerticalAlignment="Center" Margin="0,0,15,0"/>
+
+                                <Ellipse Grid.Column="1" Width="15" Height="15" Margin="0,0,15,0" VerticalAlignment="Center">
                                     <Ellipse.Style>
                                         <Style TargetType="Ellipse">
                                             <Setter Property="Fill" Value="#E0E0E0"/>
@@ -32378,9 +35289,9 @@ namespace RedditVideoStudio.UI.ViewModels
                                     </Ellipse.Style>
                                 </Ellipse>
 
-                                <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="18" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="18" VerticalAlignment="Center"/>
 
-                                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                <StackPanel Grid.Column="3" Orientation="Horizontal">
                                     <Button Content="Connect" Command="{Binding AuthenticateCommand}" IsEnabled="{Binding !IsBusy}">
                                         <Button.Style>
                                             <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
@@ -32481,6 +35392,7 @@ using RedditVideoStudio.UI.Logging;
 using RedditVideoStudio.UI.ViewModels;
 using RedditVideoStudio.UI.ViewModels.Settings;
 using Serilog;
+using System;
 using System.IO;
 using System.Windows;
 
@@ -32500,8 +35412,6 @@ namespace RedditVideoStudio.UI
                 ConfigureLogger();
                 Host = ConfigureHost();
                 await Host.StartAsync();
-                // After the host is built and started, get the MainWindow from the
-                // service provider and show it. All of its dependencies will be injected.
                 Host.Services.GetRequiredService<MainWindow>().Show();
             }
             catch (Exception ex)
@@ -32517,12 +35427,11 @@ namespace RedditVideoStudio.UI
                 .UseSerilog() // Use Serilog for logging throughout the application.
                 .ConfigureServices((context, services) =>
                 {
-                    // Register all services and view models with the DI container.
                     services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(ApplicationAssemblyReference).Assembly));
 
-                    // Register IVideoDestination. The container will now know to provide a
-                    // YouTubeDestination instance whenever an IVideoDestination is requested.
+                    // Register Destination Services
                     services.AddSingleton<IVideoDestination, YouTubeDestination>();
+                    services.AddSingleton<IVideoDestination, TikTokDestination>();
 
                     services.AddSingleton<ISettingsService, SettingsService>();
 
@@ -32535,6 +35444,9 @@ namespace RedditVideoStudio.UI
                     services.AddSingleton<IFfmpegService, FfmpegService>();
                     services.AddSingleton<IYouTubeServiceFactory, YouTubeServiceFactory>();
                     services.AddSingleton<ITempDirectoryFactory, TempDirectoryFactory>();
+
+                    // TikTok Services
+                    services.AddSingleton<ITikTokServiceFactory, TikTokServiceFactory>();
                     services.AddSingleton<TikTokAuthService>();
 
                     // Register all TTS implementations as singletons
@@ -32573,7 +35485,7 @@ namespace RedditVideoStudio.UI
 
                     // UI Windows
                     services.AddSingleton<MainWindow>();
-                    services.AddTransient<SettingsWindow>(); // Transient so a new one opens each time
+                    services.AddTransient<SettingsWindow>();
                 }).Build();
         }
 
@@ -32767,6 +35679,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RedditVideoStudio.Core.Exceptions;
 using RedditVideoStudio.Core.Interfaces;
+using RedditVideoStudio.Domain.Models;
 using RedditVideoStudio.Infrastructure.Services;
 using RedditVideoStudio.Shared.Models;
 using RedditVideoStudio.UI.Logging;
@@ -32786,50 +35699,35 @@ namespace RedditVideoStudio.UI
     public partial class MainWindow : Window
     {
         private readonly ILogger<MainWindow> _logger;
+        private readonly IServiceProvider _serviceProvider;
         private readonly IRedditService _redditService;
         private readonly IAppConfiguration _configService;
-        private readonly IImageService _imageService;
-        private readonly IPexelsService _pexelsService;
-        private readonly SettingsViewModel _settingsViewModel;
         private readonly IVideoComposer _videoComposer;
-        private readonly IYouTubeServiceFactory _youTubeServiceFactory;
-        private readonly IFfmpegService _ffmpegService; // Service was already here, needed for the fix
 
         private readonly ObservableCollection<RedditPostViewModel> _fetchedPosts = new();
         private CancellationTokenSource _cancellationTokenSource = new();
-        private IYouTubeUploadService? _youTubeUploader;
 
         public MainWindow(
-            ILogger<MainWindow> logger,
-            IRedditService redditService,
-            IAppConfiguration configService,
-            IImageService imageService,
-            IPexelsService pexelsService,
-            SettingsViewModel settingsViewModel,
-            IVideoComposer videoComposer,
-            IYouTubeServiceFactory youTubeServiceFactory,
-            IFfmpegService ffmpegService) // Already injected, now we'll use it
+             ILogger<MainWindow> logger,
+             IServiceProvider serviceProvider,
+             IRedditService redditService,
+             IAppConfiguration configService,
+             IVideoComposer videoComposer)
         {
             InitializeComponent();
 
             _logger = logger;
+            _serviceProvider = serviceProvider;
             _redditService = redditService;
             _configService = configService;
-            _imageService = imageService;
-            _pexelsService = pexelsService;
-            _settingsViewModel = settingsViewModel;
             _videoComposer = videoComposer;
-            _youTubeServiceFactory = youTubeServiceFactory;
-            _ffmpegService = ffmpegService; // Store the injected service
 
             RedditPostListBox.ItemsSource = _fetchedPosts;
-            RedditPostListBox.SelectionChanged += RedditPostListBox_SelectionChanged;
-
             var textBoxSink = new TextBoxSink(LogTextBox, Dispatcher);
             DelegatingSink.SetSink(textBoxSink);
 
             _logger.LogInformation("Application Main Window Initialized.");
-            _ = LoadAndSyncAllData();
+            _ = LoadTopPostsAsync();
         }
 
         private async void GenerateVideo_Click(object sender, RoutedEventArgs e)
@@ -32841,95 +35739,61 @@ namespace RedditVideoStudio.UI
                 return;
             }
 
+            var enabledDestinations = _configService.Settings.EnabledDestinations
+                .Where(kvp => kvp.Value)
+                .Select(kvp => _serviceProvider.GetServices<IVideoDestination>().First(s => s.Name == kvp.Key))
+                .ToList();
+
+            if (!enabledDestinations.Any())
+            {
+                MessageBox.Show("No destination platforms are enabled. Please enable and connect at least one in Settings.", "No Destinations", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             GenerationProgressBar.Value = 0;
-            GenerationProgressBar.Maximum = 100;
             _cancellationTokenSource = new CancellationTokenSource();
 
-            var progress = new Progress<ProgressReport>(report =>
+            IProgress<ProgressReport> progress = new Progress<ProgressReport>(report =>
             {
                 GenerationProgressBar.Value = report.Percentage;
                 _logger.LogInformation("[{Percentage}%] {Message}", report.Percentage, report.Message);
             });
 
-            var filesToDelete = new List<string>();
-
             try
             {
-                if (_youTubeUploader == null)
+                foreach (var destination in enabledDestinations)
                 {
-                    _logger.LogInformation("Authentication required. Starting Google Authentication for YouTube...");
-                    var credential = await AuthorizeYouTubeAsync(_cancellationTokenSource.Token);
-                    if (credential == null) throw new OperationCanceledException("YouTube authentication was canceled or failed.");
-                    _youTubeUploader = _youTubeServiceFactory.Create(credential);
-                    await SyncWithYouTubeAsync();
+                    if (!destination.IsAuthenticated)
+                    {
+                        await destination.AuthenticateAsync(_cancellationTokenSource.Token);
+                    }
                 }
 
                 foreach (var post in selectedPosts)
                 {
-                    // ... video generation logic ...
-                    string outputDir = Path.Combine(AppContext.BaseDirectory, "output");
-                    Directory.CreateDirectory(outputDir);
-                    string baseFilename = Shared.Utilities.FileUtils.SanitizeFileName(post.Title ?? string.Empty).Take(40).Aggregate("", (s, c) => s + c);
-                    string finalVideoPath = Path.Combine(outputDir, $"{baseFilename}_output.mp4");
+                    foreach (var destination in enabledDestinations)
+                    {
+                        _cancellationTokenSource.Token.ThrowIfCancellationRequested();
 
-                    // CORRECTION 1: The 'progress' argument was missing from this method call.
-                    await _videoComposer.ComposeVideoAsync(post.Title ?? string.Empty, post.Comments.ToList(), progress, _cancellationTokenSource.Token, finalVideoPath);
+                        var orientation = destination.Name == "TikTok" ? "Portrait" : "Landscape";
+                        _logger.LogInformation("Processing post '{Title}' for destination '{Destination}' with orientation '{Orientation}'", post.Title, destination.Name, orientation);
 
-                    // ... thumbnail generation logic ...
+                        string outputDir = Path.Combine(AppContext.BaseDirectory, "output");
+                        Directory.CreateDirectory(outputDir);
+                        string baseFilename = Shared.Utilities.FileUtils.SanitizeFileName(post.Title ?? string.Empty).Take(40).Aggregate("", (s, c) => s + c);
+                        string finalVideoPath = Path.Combine(outputDir, $"{baseFilename}_{destination.Name}.mp4");
 
-                    // ... upload logic ...
+                        await _videoComposer.ComposeVideoAsync(post.Title ?? "", post.Comments, progress, _cancellationTokenSource.Token, finalVideoPath, orientation);
+
+                        await destination.UploadVideoAsync(finalVideoPath, new VideoDetails { Title = post.Title ?? "" }, _cancellationTokenSource.Token);
+                    }
                 }
-
-                _logger.LogInformation("All videos rendered and scheduled for upload.");
-                MessageBox.Show("Batch video generation and upload complete!", "Done", MessageBoxButton.OK, MessageBoxImage.Information);
-
+                MessageBox.Show("All tasks completed!", "Done", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
                 HandleException(ex);
             }
-            finally
-            {
-                // ... cleanup logic ...
-            }
-        }
-
-        private void OpenSettings_Click(object sender, RoutedEventArgs e)
-        {
-            // Asks the application Host to provide a fully-formed SettingsWindow,
-            // with all of its dependencies automatically injected.
-            var settingsWindow = App.Host.Services.GetRequiredService<SettingsWindow>();
-            settingsWindow.Owner = this;
-            settingsWindow.ShowDialog();
-        }
-        private async Task LoadAndSyncAllData()
-        {
-            await LoadTopPostsAsync();
-            try
-            {
-                _logger.LogInformation("Attempting background authentication with YouTube...");
-                var credential = await AuthorizeYouTubeAsync(CancellationToken.None);
-                _youTubeUploader = _youTubeServiceFactory.Create(credential);
-                _logger.LogInformation("Background authentication successful.");
-                await SyncWithYouTubeAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Could not perform initial sync with YouTube. User may need to log in.");
-            }
-        }
-
-        private async Task<UserCredential> AuthorizeYouTubeAsync(CancellationToken token)
-        {
-            var clientSecrets = await _configService.GetYouTubeSecretsAsync(token);
-            var credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
-                clientSecrets,
-                new[] { YouTubeService.Scope.YoutubeUpload, YouTubeService.Scope.YoutubeReadonly },
-                "user",
-                token,
-                new FileDataStore(Path.Combine(AppContext.BaseDirectory, "YouTube.Auth.Store"), true)
-            );
-            return credential;
         }
 
         private async Task LoadTopPostsAsync()
@@ -32951,9 +35815,7 @@ namespace RedditVideoStudio.UI
                             Subreddit = post.Subreddit,
                             Url = post.Url,
                             Permalink = post.Permalink,
-                            Comments = post.Comments.ToList(),
-                            ScheduledPublishTimeUtc = null,
-                            IsAlreadyUploaded = false
+                            Comments = post.Comments.ToList()
                         });
                     }
                 });
@@ -32962,48 +35824,6 @@ namespace RedditVideoStudio.UI
             catch (Exception ex)
             {
                 HandleException(ex);
-            }
-        }
-
-        private async Task SyncWithYouTubeAsync()
-        {
-            if (_youTubeUploader == null)
-            {
-                _logger.LogWarning("YouTube service not available for syncing.");
-                return;
-            }
-            try
-            {
-                var youtubeTitles = await _youTubeUploader.FetchUploadedVideoTitlesAsync(CancellationToken.None);
-                if (!youtubeTitles.Any()) return;
-                foreach (var post in _fetchedPosts)
-                {
-                    var sanitizedTitle = Shared.Utilities.TextUtils.SanitizeYouTubeTitle(post.Title ?? string.Empty);
-                    if (youtubeTitles.Contains(sanitizedTitle))
-                    {
-                        post.IsAlreadyUploaded = true;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to sync with YouTube channel titles.");
-            }
-        }
-
-        private async void RefreshPosts_Click(object sender, RoutedEventArgs e)
-        {
-            await LoadAndSyncAllData();
-        }
-
-        private void RedditPostListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (RedditPostListBox.SelectedItem is RedditPostViewModel selectedPost)
-            {
-                if (!selectedPost.ScheduledPublishTimeUtc.HasValue)
-                {
-                    selectedPost.ScheduledPublishTimeUtc = DateTime.Now.Date.AddDays(1).AddHours(10);
-                }
             }
         }
 
@@ -33026,6 +35846,18 @@ namespace RedditVideoStudio.UI
             }
         }
 
+        private async void RefreshPosts_Click(object sender, RoutedEventArgs e)
+        {
+            await LoadTopPostsAsync();
+        }
+
+        private void OpenSettings_Click(object sender, RoutedEventArgs e)
+        {
+            var settingsWindow = _serviceProvider.GetRequiredService<SettingsWindow>();
+            settingsWindow.Owner = this;
+            settingsWindow.ShowDialog();
+        }
+
         private void HandleException(Exception ex)
         {
             _logger.LogError(ex, "An error occurred: {ErrorMessage}", ex.Message);
@@ -33041,9 +35873,7 @@ namespace RedditVideoStudio.UI
                     title = "FFmpeg Error";
                     message = $"An error occurred while running FFmpeg: {ffmpegEx.Message}\n\nFFmpeg Output:\n{ffmpegEx.FfmpegErrorOutput}";
                     break;
-                case RedditApiException:
-                case PexelsApiException:
-                case YouTubeApiException:
+                case ApiException:
                     title = "API Error";
                     message = $"An API error occurred: {ex.Message}\nPlease check your internet connection and API keys.";
                     break;
@@ -33518,22 +36348,16 @@ namespace RedditVideoStudio.UI
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\SettingsWindow.xaml.cs">
 <![CDATA[
-// In: C:\Users\Dean Kruger\source\repos\RedditVideoStudio\UI\SettingsWindow.xaml.cs
-
 using Microsoft.Win32;
 using RedditVideoStudio.Core.Interfaces;
 using RedditVideoStudio.Infrastructure.Services;
 using RedditVideoStudio.UI.ViewModels;
 using System;
-using System.Linq; // Added to use the .ToList() extension method
+using System.Linq;
 using System.Windows;
 
 namespace RedditVideoStudio.UI
 {
-    /// <summary>
-    /// The code-behind for the SettingsWindow.
-    /// Its responsibility is to interact with services to load and save settings.
-    /// </summary>
     public partial class SettingsWindow : Window
     {
         private readonly SettingsViewModel _viewModel;
@@ -33541,48 +36365,39 @@ namespace RedditVideoStudio.UI
         private readonly IFfmpegService _ffmpegService;
         private readonly WindowsTextToSpeechService _windowsTtsService;
 
-        /// <summary>
-        /// The constructor receives all necessary services via dependency injection.
-        /// The DI container in App.xaml.cs knows how to create and provide these.
-        /// </summary>
         public SettingsWindow(
             SettingsViewModel viewModel,
             ISettingsService settingsService,
             IFfmpegService ffmpegService,
-            WindowsTextToSpeechService windowsTtsService) // Inject the specific service here
+            WindowsTextToSpeechService windowsTtsService)
         {
             InitializeComponent();
 
             _viewModel = viewModel;
             _settingsService = settingsService;
             _ffmpegService = ffmpegService;
-            _windowsTtsService = windowsTtsService; // Store the service
+            _windowsTtsService = windowsTtsService;
 
-            // Load a fresh, editable copy of the settings into the ViewModel.
             _viewModel.Settings = _settingsService.GetSettings();
-
-            // Populate the list of available Windows voices for the dropdown.
-            // The GetVoices() method returns an array (string[]), so we convert it to a List<string>.
             _viewModel.Voices = _windowsTtsService.GetVoices().ToList();
 
-            // Set the DataContext for the entire window to our ViewModel.
-            // This allows the XAML to bind to properties like 'Settings', 'Destinations', and 'Voices'.
             DataContext = _viewModel;
         }
 
-
-        /// <summary>
-        /// When the user clicks "Save and Close", we use the SettingsService
-        /// to persist the changes from the ViewModel.
-        /// </summary>
         private void SaveAndClose_Click(object sender, RoutedEventArgs e)
         {
+            // First, update the settings dictionary from the viewmodel states
+            foreach (var destVm in _viewModel.Destinations.Destinations)
+            {
+                _viewModel.Settings.EnabledDestinations[destVm.Name] = destVm.IsEnabled;
+            }
+
+            // Now, save the updated settings object
             _settingsService.SaveSettings(_viewModel.Settings);
             DialogResult = true;
             Close();
         }
 
-        // The methods below handle opening a file dialog for the user to select video clips.
         private async void IntroHyperlink_Click(object sender, RoutedEventArgs e)
         {
             var path = ShowVideoFileDialog("Select Intro Video");
@@ -33640,9 +36455,6 @@ namespace RedditVideoStudio.UI
             }
         }
 
-        /// <summary>
-        /// Helper method to show an OpenFileDialog for video files.
-        /// </summary>
         private string ShowVideoFileDialog(string title)
         {
             var openFileDialog = new OpenFileDialog
@@ -33663,7 +36475,7 @@ namespace RedditVideoStudio.UI
 
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.14.36212.18 d17.14
+VisualStudioVersion = 17.14.36212.18
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RedditVideoStudio.Domain", "RedditVideoStudio.Domain\RedditVideoStudio.Domain.csproj", "{8C826A48-F103-456B-8EC0-6B5A8710F075}"
 EndProject
@@ -33671,11 +36483,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RedditVideoStudio.Shared", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RedditVideoStudio.Core", "RedditVideoStudio.Core\RedditVideoStudio.Core.csproj", "{D39A78A9-4F1F-413A-B746-7CFEE5BFDFCF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RedditVideoStudio.Infrastructure", "RedditVideoStudio.Infrastructure\RedditVideoStudio.Infrastructure.csproj", "{743E579D-4E51-46A2-ABF0-1804B4C83D3F}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RedditVideoStudio.Application", "RedditVideoStudio.Application\RedditVideoStudio.Application.csproj", "{6E5E0363-5D11-43BF-A6B6-3958F0BED8BD}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RedditVideoStudio.UI", "RedditVideoStudio.UI\RedditVideoStudio.UI.csproj", "{6EACEA04-B562-4676-A79C-A0B7D558E407}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RedditVideoStudio.Infrastructure", "RedditVideoStudio.Infrastructure\RedditVideoStudio.Infrastructure.csproj", "{17F35C13-8546-FFEA-83C1-39D649F5D48B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33695,10 +36507,6 @@ Global
 		{D39A78A9-4F1F-413A-B746-7CFEE5BFDFCF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D39A78A9-4F1F-413A-B746-7CFEE5BFDFCF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D39A78A9-4F1F-413A-B746-7CFEE5BFDFCF}.Release|Any CPU.Build.0 = Release|Any CPU
-		{743E579D-4E51-46A2-ABF0-1804B4C83D3F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{743E579D-4E51-46A2-ABF0-1804B4C83D3F}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{743E579D-4E51-46A2-ABF0-1804B4C83D3F}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{743E579D-4E51-46A2-ABF0-1804B4C83D3F}.Release|Any CPU.Build.0 = Release|Any CPU
 		{6E5E0363-5D11-43BF-A6B6-3958F0BED8BD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{6E5E0363-5D11-43BF-A6B6-3958F0BED8BD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6E5E0363-5D11-43BF-A6B6-3958F0BED8BD}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -33707,6 +36515,10 @@ Global
 		{6EACEA04-B562-4676-A79C-A0B7D558E407}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6EACEA04-B562-4676-A79C-A0B7D558E407}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6EACEA04-B562-4676-A79C-A0B7D558E407}.Release|Any CPU.Build.0 = Release|Any CPU
+		{17F35C13-8546-FFEA-83C1-39D649F5D48B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{17F35C13-8546-FFEA-83C1-39D649F5D48B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{17F35C13-8546-FFEA-83C1-39D649F5D48B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{17F35C13-8546-FFEA-83C1-39D649F5D48B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

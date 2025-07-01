@@ -1,7 +1,4 @@
-﻿// In: C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Application\Services\VideoComposer.cs
-
-using Microsoft.Extensions.Logging;
-using RedditVideoStudio.Core.Exceptions;
+﻿using Microsoft.Extensions.Logging;
 using RedditVideoStudio.Core.Interfaces;
 using RedditVideoStudio.Domain.Models;
 using RedditVideoStudio.Shared.Models;
@@ -43,47 +40,19 @@ namespace RedditVideoStudio.Application.Services
             _tempDirectoryFactory = tempDirectoryFactory;
         }
 
-        public async Task ComposeVideoAsync(IProgress<ProgressReport> progress, CancellationToken cancellationToken)
+        public async Task ComposeVideoAsync(string title, List<string> comments, IProgress<ProgressReport> progress, CancellationToken cancellationToken, string outputPath, string orientation)
         {
-            var posts = await _redditService.FetchFullPostDataAsync(cancellationToken);
-            var postCount = posts.Count;
-            var postIndex = 0;
-
-            foreach (var post in posts)
+            var originalOrientation = _appConfig.Settings.Ffmpeg.VideoOrientation;
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var overallProgress = new Progress<ProgressReport>(report =>
-                {
-                    var startPercentage = (int)(((double)postIndex / postCount) * 100);
-                    var endPercentage = (int)(((double)(postIndex + 1) / postCount) * 100);
-                    var range = endPercentage - startPercentage;
-                    var scaledPercentage = startPercentage + (int)((double)report.Percentage / 100 * range);
+                // Temporarily set the orientation for this specific video composition
+                _appConfig.Settings.Ffmpeg.VideoOrientation = orientation;
+                _logger.LogInformation("Starting video composition for: '{Title}' with orientation: {Orientation}", title, orientation);
 
-                    progress.Report(new ProgressReport
-                    {
-                        Percentage = scaledPercentage,
-                        Message = $"Video {postIndex + 1}/{postCount}: {report.Message}"
-                    });
-                });
+                var clipSettings = _appConfig.Settings.ClipSettings;
+                var videoSegments = new List<string>();
 
-                var outputDir = Path.Combine(Directory.GetCurrentDirectory(), "output");
-                string baseFilename = FileUtils.SanitizeFileName(post.Title!).Take(40).Aggregate("", (s, c) => s + c);
-                string finalVideoPath = Path.Combine(outputDir, $"{baseFilename}_output.mp4");
-
-                await ComposeVideoAsync(post.Title!, post.Comments, overallProgress, cancellationToken, finalVideoPath);
-                postIndex++;
-            }
-        }
-
-        public async Task ComposeVideoAsync(string title, List<string> comments, IProgress<ProgressReport> progress, CancellationToken cancellationToken, string outputPath)
-        {
-            _logger.LogInformation("Starting video composition for: {Title}", title);
-            var clipSettings = _appConfig.Settings.ClipSettings;
-            var videoSegments = new List<string>();
-
-            using (var tempDirectory = _tempDirectoryFactory.Create())
-            {
-                try
+                using (var tempDirectory = _tempDirectoryFactory.Create())
                 {
                     if (!string.IsNullOrEmpty(clipSettings.IntroPath) && File.Exists(clipSettings.IntroPath) && clipSettings.IntroDuration > 0)
                     {
@@ -91,41 +60,30 @@ namespace RedditVideoStudio.Application.Services
                         videoSegments.Add(introPath);
                     }
 
-                    // Generate Title Segment
                     var titleStoryboard = await _storyboardGenerator.GenerateAsync(new[] { title }, tempDirectory.Path, "Title", progress, cancellationToken);
                     var titleSegmentPath = await _videoSegmentGenerator.GenerateAsync(titleStoryboard, "abstract", tempDirectory.Path, "Title", Path.Combine(tempDirectory.Path, "title_clip.mp4"), progress, cancellationToken);
                     videoSegments.Add(titleSegmentPath);
 
-                    // Process Break Clip
                     string? breakClipPath = null;
                     if (!string.IsNullOrEmpty(clipSettings.BreakClipPath) && File.Exists(clipSettings.BreakClipPath) && clipSettings.BreakClipDuration > 0)
                     {
                         breakClipPath = await ProcessStaticClip(clipSettings.BreakClipPath, clipSettings.BreakClipDuration, "break", tempDirectory.Path, cancellationToken);
                     }
 
-                    // Generate Comment Segments
                     if (comments.Any())
                     {
                         for (int i = 0; i < comments.Count; i++)
                         {
                             cancellationToken.ThrowIfCancellationRequested();
-
                             if (!string.IsNullOrEmpty(breakClipPath))
                             {
                                 videoSegments.Add(breakClipPath);
-                                _logger.LogInformation("Added break clip for comment {CommentNumber}", i + 1);
                             }
-
                             var comment = comments[i];
                             var commentSegmentName = $"Comment_{i + 1}";
-                            _logger.LogInformation("Generating video segment for {SegmentName}", commentSegmentName);
-
-                            // --- FINAL CORRECTION ---
-                            // Ensure each comment starts with a completely new storyboard to prevent state bleed-over.
                             var commentStoryboard = await _storyboardGenerator.GenerateAsync(new[] { comment }, tempDirectory.Path, commentSegmentName, progress, cancellationToken);
                             var commentSegmentPath = await _videoSegmentGenerator.GenerateAsync(commentStoryboard, "nature", tempDirectory.Path, commentSegmentName, Path.Combine(tempDirectory.Path, $"{commentSegmentName}_clip.mp4"), progress, cancellationToken);
                             videoSegments.Add(commentSegmentPath);
-                            // --- END OF FINAL CORRECTION ---
                         }
                     }
 
@@ -141,11 +99,11 @@ namespace RedditVideoStudio.Application.Services
                     _logger.LogInformation("Final video rendered successfully at: {Path}", outputPath);
                     progress.Report(new ProgressReport { Percentage = 100, Message = "Video composition complete." });
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "An error occurred during the video composition pipeline for title: {Title}", title);
-                    throw;
-                }
+            }
+            finally
+            {
+                // IMPORTANT: Restore the original setting
+                _appConfig.Settings.Ffmpeg.VideoOrientation = originalOrientation;
             }
         }
 
@@ -162,6 +120,11 @@ namespace RedditVideoStudio.Application.Services
             var finalClipPath = Path.Combine(tempPath, $"{clipName}_final.mp4");
             await _ffmpegService.NormalizeVideoAsync(tempClipPath, finalClipPath, cancellationToken);
             return finalClipPath;
+        }
+
+        public Task ComposeVideoAsync(IProgress<ProgressReport> progress, CancellationToken cancellationToken)
+        {
+            throw new NotImplementedException("Batch processing for multiple platforms is not yet implemented.");
         }
     }
 }
