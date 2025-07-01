@@ -31,7 +31,7 @@ namespace RedditVideoStudio.UI
         private readonly SettingsViewModel _settingsViewModel;
         private readonly IVideoComposer _videoComposer;
         private readonly IYouTubeServiceFactory _youTubeServiceFactory;
-        private readonly IFfmpegService _ffmpegService; // Service was already here, needed for the fix
+        private readonly IFfmpegService _ffmpegService;
 
         private readonly ObservableCollection<RedditPostViewModel> _fetchedPosts = new();
         private CancellationTokenSource _cancellationTokenSource = new();
@@ -46,7 +46,7 @@ namespace RedditVideoStudio.UI
             SettingsViewModel settingsViewModel,
             IVideoComposer videoComposer,
             IYouTubeServiceFactory youTubeServiceFactory,
-            IFfmpegService ffmpegService) // Already injected, now we'll use it
+            IFfmpegService ffmpegService)
         {
             InitializeComponent();
 
@@ -58,7 +58,7 @@ namespace RedditVideoStudio.UI
             _settingsViewModel = settingsViewModel;
             _videoComposer = videoComposer;
             _youTubeServiceFactory = youTubeServiceFactory;
-            _ffmpegService = ffmpegService; // Store the injected service
+            _ffmpegService = ffmpegService;
 
             RedditPostListBox.ItemsSource = _fetchedPosts;
             RedditPostListBox.SelectionChanged += RedditPostListBox_SelectionChanged;
@@ -83,7 +83,7 @@ namespace RedditVideoStudio.UI
             GenerationProgressBar.Maximum = 100;
             _cancellationTokenSource = new CancellationTokenSource();
 
-            var progress = new Progress<ProgressReport>(report =>
+            IProgress<ProgressReport> progress = new Progress<ProgressReport>(report =>
             {
                 GenerationProgressBar.Value = report.Percentage;
                 _logger.LogInformation("[{Percentage}%] {Message}", report.Percentage, report.Message);
@@ -104,18 +104,29 @@ namespace RedditVideoStudio.UI
 
                 foreach (var post in selectedPosts)
                 {
-                    // ... video generation logic ...
+                    _cancellationTokenSource.Token.ThrowIfCancellationRequested();
+                    progress.Report(new ProgressReport { Percentage = 0, Message = $"Starting process for '{post.Title}'..." });
+
                     string outputDir = Path.Combine(AppContext.BaseDirectory, "output");
                     Directory.CreateDirectory(outputDir);
                     string baseFilename = Shared.Utilities.FileUtils.SanitizeFileName(post.Title ?? string.Empty).Take(40).Aggregate("", (s, c) => s + c);
                     string finalVideoPath = Path.Combine(outputDir, $"{baseFilename}_output.mp4");
+                    filesToDelete.Add(finalVideoPath);
 
-                    // CORRECTION 1: The 'progress' argument was missing from this method call.
                     await _videoComposer.ComposeVideoAsync(post.Title ?? string.Empty, post.Comments.ToList(), progress, _cancellationTokenSource.Token, finalVideoPath);
 
-                    // ... thumbnail generation logic ...
+                    progress.Report(new ProgressReport { Percentage = 95, Message = "Generating thumbnail..." });
+                    string tempThumbBgPath = Path.Combine(outputDir, $"{baseFilename}_thumb_bg.jpg");
+                    string thumbnailPath = Path.Combine(outputDir, $"{baseFilename}_thumb.jpg");
+                    filesToDelete.Add(tempThumbBgPath);
+                    filesToDelete.Add(thumbnailPath);
+                    await _pexelsService.DownloadRandomImageAsync(_configService.Settings.ImageGeneration.ThumbnailPexelsQuery, tempThumbBgPath, _cancellationTokenSource.Token);
+                    await _imageService.GenerateThumbnailAsync(tempThumbBgPath, post.Title ?? "Reddit Story", thumbnailPath, _cancellationTokenSource.Token);
 
-                    // ... upload logic ...
+                    progress.Report(new ProgressReport { Percentage = 98, Message = "Uploading to YouTube..." });
+                    string? videoId = await _youTubeUploader.UploadVideoAsync(finalVideoPath, thumbnailPath, post.Title ?? "", $"Read the full story on Reddit: https://reddit.com{post.Permalink}", post.ScheduledPublishTimeUtc, progress, _cancellationTokenSource.Token);
+                    post.IsAlreadyUploaded = true;
+                    _logger.LogInformation("Successfully uploaded video for post '{Title}' with YouTube ID: {VideoId}", post.Title, videoId);
                 }
 
                 _logger.LogInformation("All videos rendered and scheduled for upload.");
@@ -128,14 +139,25 @@ namespace RedditVideoStudio.UI
             }
             finally
             {
-                // ... cleanup logic ...
+                foreach (var file in filesToDelete)
+                {
+                    if (File.Exists(file))
+                    {
+                        try
+                        {
+                            File.Delete(file);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Could not delete temporary file: {File}", file);
+                        }
+                    }
+                }
             }
         }
 
         private void OpenSettings_Click(object sender, RoutedEventArgs e)
         {
-            // Asks the application Host to provide a fully-formed SettingsWindow,
-            // with all of its dependencies automatically injected.
             var settingsWindow = App.Host.Services.GetRequiredService<SettingsWindow>();
             settingsWindow.Owner = this;
             settingsWindow.ShowDialog();
