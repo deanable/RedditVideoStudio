@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.Logging;
+﻿// In: C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Application\Services\VideoComposer.cs
+
+using Microsoft.Extensions.Logging;
 using RedditVideoStudio.Core.Interfaces;
 using RedditVideoStudio.Domain.Models;
 using RedditVideoStudio.Shared.Models;
@@ -52,6 +54,10 @@ namespace RedditVideoStudio.Application.Services
                 var clipSettings = _appConfig.Settings.ClipSettings;
                 var videoSegments = new List<string>();
 
+                // CORRECTED: Use the user-defined query from settings
+                var backgroundQuery = _appConfig.Settings.Pexels.DefaultQuery;
+                _logger.LogInformation("Using background video query: '{Query}'", backgroundQuery);
+
                 using (var tempDirectory = _tempDirectoryFactory.Create())
                 {
                     if (!string.IsNullOrEmpty(clipSettings.IntroPath) && File.Exists(clipSettings.IntroPath) && clipSettings.IntroDuration > 0)
@@ -61,7 +67,8 @@ namespace RedditVideoStudio.Application.Services
                     }
 
                     var titleStoryboard = await _storyboardGenerator.GenerateAsync(new[] { title }, tempDirectory.Path, "Title", progress, cancellationToken);
-                    var titleSegmentPath = await _videoSegmentGenerator.GenerateAsync(titleStoryboard, "abstract", tempDirectory.Path, "Title", Path.Combine(tempDirectory.Path, "title_clip.mp4"), progress, cancellationToken);
+                    // CORRECTED: Pass the background query from settings instead of a hardcoded value
+                    var titleSegmentPath = await _videoSegmentGenerator.GenerateAsync(titleStoryboard, backgroundQuery, tempDirectory.Path, "Title", Path.Combine(tempDirectory.Path, "title_clip.mp4"), progress, cancellationToken);
                     videoSegments.Add(titleSegmentPath);
 
                     string? breakClipPath = null;
@@ -82,7 +89,8 @@ namespace RedditVideoStudio.Application.Services
                             var comment = comments[i];
                             var commentSegmentName = $"Comment_{i + 1}";
                             var commentStoryboard = await _storyboardGenerator.GenerateAsync(new[] { comment }, tempDirectory.Path, commentSegmentName, progress, cancellationToken);
-                            var commentSegmentPath = await _videoSegmentGenerator.GenerateAsync(commentStoryboard, "nature", tempDirectory.Path, commentSegmentName, Path.Combine(tempDirectory.Path, $"{commentSegmentName}_clip.mp4"), progress, cancellationToken);
+                            // CORRECTED: Pass the background query from settings instead of a hardcoded value
+                            var commentSegmentPath = await _videoSegmentGenerator.GenerateAsync(commentStoryboard, backgroundQuery, tempDirectory.Path, commentSegmentName, Path.Combine(tempDirectory.Path, $"{commentSegmentName}_clip.mp4"), progress, cancellationToken);
                             videoSegments.Add(commentSegmentPath);
                         }
                     }

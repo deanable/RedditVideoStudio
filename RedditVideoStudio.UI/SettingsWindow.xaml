@@ -101,7 +101,21 @@
                                 <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Pexels.ApiKey, UpdateSourceTrigger=PropertyChanged}"/>
 
                                 <Label Grid.Row="1" Grid.Column="0" Content="Default Video Query:"/>
-                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Pexels.DefaultQuery, UpdateSourceTrigger=PropertyChanged}"/>
+                                <ComboBox Grid.Row="1" Grid.Column="1" IsEditable="True"
+                                          Text="{Binding Pexels.DefaultQuery, UpdateSourceTrigger=PropertyChanged}">
+                                    <x:Array Type="sys:String">
+                                        <sys:String>nature</sys:String>
+                                        <sys:String>abstract</sys:String>
+                                        <sys:String>technology</sys:String>
+                                        <sys:String>cityscape</sys:String>
+                                        <sys:String>space</sys:String>
+                                        <sys:String>ocean</sys:String>
+                                        <sys:String>forest</sys:String>
+                                        <sys:String>mountains</sys:String>
+                                        <sys:String>coding</sys:String>
+                                        <sys:String>gaming</sys:String>
+                                    </x:Array>
+                                </ComboBox>
                             </Grid>
                         </GroupBox>
                     </StackPanel>
@@ -221,7 +235,7 @@
                             </Grid>
                         </GroupBox>
 
-                        <GroupBox Header="Overlay &amp; Text Style" Padding="10" Margin="0,0,0,10" DataContext="{Binding Settings.ImageGeneration}">
+                        <GroupBox Header="Overlay and Text Style" Padding="10" Margin="0,0,0,10" DataContext="{Binding Settings.ImageGeneration}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="180"/>
@@ -287,9 +301,7 @@
                                 <LineBreak/>
                                 2. Rename the downloaded file to exactly <Bold>client_secrets.json</Bold>
                                 <LineBreak/>
-                                3. Copy the file into the following directory:
-                                <LineBreak/>
-                                <Bold>C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\bin\Debug\net9.0-windows</Bold>
+                                3. Copy the file into the application's execution directory.
                             </TextBlock>
                         </GroupBox>
 
