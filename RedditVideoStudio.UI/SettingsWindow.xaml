@@ -235,7 +235,7 @@
                             </Grid>
                         </GroupBox>
 
-                        <GroupBox Header="Overlay and Text Style" Padding="10" Margin="0,0,0,10" DataContext="{Binding Settings.ImageGeneration}">
+                        <GroupBox Header="Overlay &amp; Text Style" Padding="10" Margin="0,0,0,10" DataContext="{Binding Settings.ImageGeneration}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="180"/>
