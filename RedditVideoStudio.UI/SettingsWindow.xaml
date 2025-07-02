@@ -12,6 +12,52 @@
         <converters:FullPathToFileNameConverter x:Key="FullPathToFileNameConverter"/>
         <converters:NotNullToBooleanConverter x:Key="NotNullToBooleanConverter"/>
 
+        <x:Array x:Key="SubredditPresets" Type="sys:String">
+            <sys:String>AskReddit</sys:String>
+            <sys:String>AmItheAsshole</sys:String>
+            <sys:String>tifu</sys:String>
+            <sys:String>confession</sys:String>
+            <sys:String>NoSleep</sys:String>
+            <sys:String>relationships</sys:String>
+            <sys:String>relationship_advice</sys:String>
+            <sys:String>pettyrevenge</sys:String>
+            <sys:String>prorevenge</sys:String>
+            <sys:String>MaliciousCompliance</sys:String>
+            <sys:String>IDontWorkHereLady</sys:String>
+            <sys:String>TalesFromRetail</sys:String>
+            <sys:String>TalesFromTechSupport</sys:String>
+            <sys:String>Glitch_in_the_Matrix</sys:String>
+            <sys:String>LetsNotMeet</sys:String>
+            <sys:String>UnresolvedMysteries</sys:String>
+            <sys:String>explainlikeimfive</sys:String>
+            <sys:String>AskMen</sys:String>
+            <sys:String>AskWomen</sys:String>
+            <sys:String>HFY</sys:String>
+        </x:Array>
+
+        <x:Array x:Key="BackgroundVideoQueries" Type="sys:String">
+            <sys:String>nature</sys:String>
+            <sys:String>abstract</sys:String>
+            <sys:String>technology</sys:String>
+            <sys:String>cityscape</sys:String>
+            <sys:String>space</sys:String>
+            <sys:String>ocean</sys:String>
+            <sys:String>forest</sys:String>
+            <sys:String>mountains</sys:String>
+            <sys:String>coding</sys:String>
+            <sys:String>gaming</sys:String>
+        </x:Array>
+
+        <x:Array x:Key="ThumbnailBackgroundQueries" Type="sys:String">
+            <sys:String>abstract background</sys:String>
+            <sys:String>person thinking</sys:String>
+            <sys:String>woman working on laptop</sys:String>
+            <sys:String>man looking surprised</sys:String>
+            <sys:String>dark pattern</sys:String>
+            <sys:String>colorful gradient</sys:String>
+        </x:Array>
+
+
         <Style TargetType="Label">
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
@@ -46,9 +92,9 @@
             </TabItem>
             <TabItem Header="Content Sources">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
-                    <StackPanel DataContext="{Binding Settings}">
+                    <StackPanel>
                         <GroupBox Header="Reddit Settings" Padding="10" Margin="0,0,0,10">
-                            <Grid DataContext="{Binding Reddit}">
+                            <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="180" />
                                     <ColumnDefinition Width="*" />
@@ -62,45 +108,21 @@
 
                                 <Label Content="Subreddit:" Grid.Row="0" Grid.Column="0"/>
                                 <ComboBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" IsEditable="True"
-                                          Text="{Binding Subreddit, UpdateSourceTrigger=PropertyChanged}">
-                                    <ComboBox.ItemsSource>
-                                        <x:Array Type="sys:String">
-                                            <sys:String>AskReddit</sys:String>
-                                            <sys:String>AmItheAsshole</sys:String>
-                                            <sys:String>tifu</sys:String>
-                                            <sys:String>confession</sys:String>
-                                            <sys:String>NoSleep</sys:String>
-                                            <sys:String>relationships</sys:String>
-                                            <sys:String>relationship_advice</sys:String>
-                                            <sys:String>pettyrevenge</sys:String>
-                                            <sys:String>prorevenge</sys:String>
-                                            <sys:String>MaliciousCompliance</sys:String>
-                                            <sys:String>IDontWorkHereLady</sys:String>
-                                            <sys:String>TalesFromRetail</sys:String>
-                                            <sys:String>TalesFromTechSupport</sys:String>
-                                            <sys:String>Glitch_in_the_Matrix</sys:String>
-                                            <sys:String>LetsNotMeet</sys:String>
-                                            <sys:String>UnresolvedMysteries</sys:String>
-                                            <sys:String>explainlikeimfive</sys:String>
-                                            <sys:String>AskMen</sys:String>
-                                            <sys:String>AskWomen</sys:String>
-                                            <sys:String>HFY</sys:String>
-                                        </x:Array>
-                                    </ComboBox.ItemsSource>
-                                </ComboBox>
+                                          ItemsSource="{StaticResource SubredditPresets}"
+                                          Text="{Binding DataContext.Settings.Reddit.Subreddit, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged}"/>
 
                                 <Label Content="Post Limit:" Grid.Row="1" Grid.Column="0" ToolTip="The maximum number of posts to retrieve from the subreddit."/>
-                                <Slider Value="{Binding PostLimit}" Minimum="1" Maximum="50" IsSnapToTickEnabled="True" TickFrequency="1" Grid.Row="1" Grid.Column="1"/>
-                                <TextBlock Text="{Binding PostLimit}" Grid.Row="1" Grid.Column="2" MinWidth="25" />
+                                <Slider Value="{Binding DataContext.Settings.Reddit.PostLimit, RelativeSource={RelativeSource AncestorType=Window}}" Minimum="1" Maximum="50" IsSnapToTickEnabled="True" TickFrequency="1" Grid.Row="1" Grid.Column="1"/>
+                                <TextBlock Text="{Binding DataContext.Settings.Reddit.PostLimit, RelativeSource={RelativeSource AncestorType=Window}}" Grid.Row="1" Grid.Column="2" MinWidth="25" />
 
                                 <Label Content="Comment Limit:" Grid.Row="2" Grid.Column="0" ToolTip="The maximum number of top comments to retrieve for each post."/>
-                                <Slider Value="{Binding CommentLimit}" Minimum="1" Maximum="25" IsSnapToTickEnabled="True" TickFrequency="1" Grid.Row="2" Grid.Column="1"/>
-                                <TextBlock Text="{Binding CommentLimit}" Grid.Row="2" Grid.Column="2" MinWidth="25" />
+                                <Slider Value="{Binding DataContext.Settings.Reddit.CommentLimit, RelativeSource={RelativeSource AncestorType=Window}}" Minimum="1" Maximum="25" IsSnapToTickEnabled="True" TickFrequency="1" Grid.Row="2" Grid.Column="1"/>
+                                <TextBlock Text="{Binding DataContext.Settings.Reddit.CommentLimit, RelativeSource={RelativeSource AncestorType=Window}}" Grid.Row="2" Grid.Column="2" MinWidth="25" />
                             </Grid>
                         </GroupBox>
 
                         <GroupBox Header="Pexels Settings" Padding="10" Margin="0,0,0,10">
-                            <Grid DataContext="{Binding Pexels}">
+                            <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
@@ -110,7 +132,7 @@
                                 </Grid.ColumnDefinitions>
 
                                 <Label Grid.Row="0" Grid.Column="0" Content="Pexels API Key:"/>
-                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding ApiKey, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding DataContext.Settings.Pexels.ApiKey, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged}"/>
                             </Grid>
                         </GroupBox>
                     </StackPanel>
@@ -119,9 +141,9 @@
 
             <TabItem Header="Audio and Visuals">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
-                    <StackPanel DataContext="{Binding Settings}">
+                    <StackPanel>
                         <GroupBox Header="Text-to-Speech (TTS) Settings" Padding="10" Margin="0,0,0,10">
-                            <Grid DataContext="{Binding Tts}">
+                            <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="180"/>
                                     <ColumnDefinition Width="*" />
@@ -132,15 +154,15 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
                                 <Label Content="TTS Provider:" Grid.Row="0" Grid.Column="0"/>
-                                <ComboBox x:Name="TtsProviderComboBox" Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" SelectedValue="{Binding Provider}" SelectedValuePath="Content">
+                                <ComboBox x:Name="TtsProviderComboBox" Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" SelectedValue="{Binding DataContext.Settings.Tts.Provider, RelativeSource={RelativeSource AncestorType=Window}}" SelectedValuePath="Content">
                                     <ComboBoxItem>Google</ComboBoxItem>
                                     <ComboBoxItem>Azure</ComboBoxItem>
                                     <ComboBoxItem>Windows</ComboBoxItem>
                                     <ComboBoxItem>ElevenLabs</ComboBoxItem>
                                 </ComboBox>
                                 <Label Content="Speaking Rate:" Grid.Row="1" Grid.Column="0"/>
-                                <Slider Value="{Binding SpeakingRate}" Minimum="0.5" Maximum="2.0" TickFrequency="0.05" Grid.Row="1" Grid.Column="1"/>
-                                <TextBlock Text="{Binding SpeakingRate, StringFormat='F2'}" Grid.Row="1" Grid.Column="2" MinWidth="30" />
+                                <Slider Value="{Binding DataContext.Settings.Tts.SpeakingRate, RelativeSource={RelativeSource AncestorType=Window}}" Minimum="0.5" Maximum="2.0" TickFrequency="0.05" Grid.Row="1" Grid.Column="1"/>
+                                <TextBlock Text="{Binding DataContext.Settings.Tts.SpeakingRate, RelativeSource={RelativeSource AncestorType=Window}, StringFormat='F2'}" Grid.Row="1" Grid.Column="2" MinWidth="30" />
                             </Grid>
                         </GroupBox>
 
@@ -149,48 +171,36 @@
                                 <Style TargetType="GroupBox">
                                     <Setter Property="Visibility" Value="Collapsed" />
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Settings.Tts.Provider}" Value="Windows">
+                                        <DataTrigger Binding="{Binding DataContext.Settings.Tts.Provider, RelativeSource={RelativeSource AncestorType=Window}}" Value="Windows">
                                             <Setter Property="Visibility" Value="Visible" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </GroupBox.Style>
-                            <Grid DataContext="{Binding Tts}">
+                            <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="180" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <Label Content="Voice:" Grid.Column="0" ToolTip="Select the installed Windows voice to use."/>
-                                <ComboBox Grid.Column="1" ItemsSource="{Binding DataContext.Voices, RelativeSource={RelativeSource AncestorType=Window}}" SelectedValue="{Binding WindowsVoice}"/>
+                                <ComboBox Grid.Column="1" ItemsSource="{Binding Voices}" SelectedValue="{Binding DataContext.Settings.Tts.WindowsVoice, RelativeSource={RelativeSource AncestorType=Window}}"/>
                             </Grid>
                         </GroupBox>
 
                         <GroupBox Header="Background Video Settings" Padding="10" Margin="0,0,0,10">
-                            <Grid DataContext="{Binding Pexels}">
+                            <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="180"/>
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <Label Grid.Row="0" Grid.Column="0" Content="Default Video Query:"/>
                                 <ComboBox Grid.Row="0" Grid.Column="1" IsEditable="True"
-                                          Text="{Binding DefaultQuery, UpdateSourceTrigger=PropertyChanged}">
-                                    <x:Array Type="sys:String">
-                                        <sys:String>nature</sys:String>
-                                        <sys:String>abstract</sys:String>
-                                        <sys:String>technology</sys:String>
-                                        <sys:String>cityscape</sys:String>
-                                        <sys:String>space</sys:String>
-                                        <sys:String>ocean</sys:String>
-                                        <sys:String>forest</sys:String>
-                                        <sys:String>mountains</sys:String>
-                                        <sys:String>coding</sys:String>
-                                        <sys:String>gaming</sys:String>
-                                    </x:Array>
-                                </ComboBox>
+                                          ItemsSource="{StaticResource BackgroundVideoQueries}"
+                                          Text="{Binding DataContext.Settings.Pexels.DefaultQuery, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged}"/>
                             </Grid>
                         </GroupBox>
 
-                        <GroupBox Header="Video Clips" Padding="10" Margin="0,0,0,10" DataContext="{Binding ClipSettings}">
+                        <GroupBox Header="Video Clips" Padding="10" Margin="0,0,0,10">
                             <StackPanel>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -199,8 +209,8 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock VerticalAlignment="Center"><Hyperlink Click="IntroHyperlink_Click">Intro Clip:</Hyperlink></TextBlock>
-                                    <TextBlock Grid.Column="1" Text="{Binding IntroPath, Converter={StaticResource FullPathToFileNameConverter}}" VerticalAlignment="Center" Margin="10,0" ToolTip="{Binding IntroPath}"/>
-                                    <Slider x:Name="IntroDurationSlider" Grid.Column="2" Value="{Binding IntroDuration, Mode=TwoWay}" Minimum="0" Maximum="30" Width="150" ToolTip="Duration in seconds. Set to 0 to disable."/>
+                                    <TextBlock Grid.Column="1" Text="{Binding DataContext.Settings.ClipSettings.IntroPath, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource FullPathToFileNameConverter}}" VerticalAlignment="Center" Margin="10,0" ToolTip="{Binding DataContext.Settings.ClipSettings.IntroPath, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                    <Slider x:Name="IntroDurationSlider" Grid.Column="2" Value="{Binding DataContext.Settings.ClipSettings.IntroDuration, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}" Minimum="0" Maximum="30" Width="150" ToolTip="Duration in seconds. Set to 0 to disable."/>
                                 </Grid>
                                 <Grid Margin="0,10,0,0">
                                     <Grid.ColumnDefinitions>
@@ -209,8 +219,8 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock VerticalAlignment="Center"><Hyperlink Click="BreakHyperlink_Click">Break/Separator Clip:</Hyperlink></TextBlock>
-                                    <TextBlock Grid.Column="1" Text="{Binding BreakClipPath, Converter={StaticResource FullPathToFileNameConverter}}" VerticalAlignment="Center" Margin="10,0" ToolTip="{Binding BreakClipPath}"/>
-                                    <Slider x:Name="BreakDurationSlider" Grid.Column="2" Value="{Binding BreakClipDuration, Mode=TwoWay}" Minimum="0" Maximum="10" Width="150" ToolTip="Duration in seconds. Set to 0 to disable."/>
+                                    <TextBlock Grid.Column="1" Text="{Binding DataContext.Settings.ClipSettings.BreakClipPath, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource FullPathToFileNameConverter}}" VerticalAlignment="Center" Margin="10,0" ToolTip="{Binding DataContext.Settings.ClipSettings.BreakClipPath, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                    <Slider x:Name="BreakDurationSlider" Grid.Column="2" Value="{Binding DataContext.Settings.ClipSettings.BreakClipDuration, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}" Minimum="0" Maximum="10" Width="150" ToolTip="Duration in seconds. Set to 0 to disable."/>
                                 </Grid>
                                 <Grid Margin="0,10,0,0">
                                     <Grid.ColumnDefinitions>
@@ -219,17 +229,17 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock VerticalAlignment="Center"><Hyperlink Click="OutroHyperlink_Click">Outro Clip:</Hyperlink></TextBlock>
-                                    <TextBlock Grid.Column="1" Text="{Binding OutroPath, Converter={StaticResource FullPathToFileNameConverter}}" VerticalAlignment="Center" Margin="10,0" ToolTip="{Binding OutroPath}"/>
-                                    <Slider x:Name="OutroDurationSlider" Grid.Column="2" Value="{Binding OutroDuration, Mode=TwoWay}" Minimum="0" Maximum="30" Width="150" ToolTip="Duration in seconds. Set to 0 to disable."/>
+                                    <TextBlock Grid.Column="1" Text="{Binding DataContext.Settings.ClipSettings.OutroPath, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource FullPathToFileNameConverter}}" VerticalAlignment="Center" Margin="10,0" ToolTip="{Binding DataContext.Settings.ClipSettings.OutroPath, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                    <Slider x:Name="OutroDurationSlider" Grid.Column="2" Value="{Binding DataContext.Settings.ClipSettings.OutroDuration, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}" Minimum="0" Maximum="30" Width="150" ToolTip="Duration in seconds. Set to 0 to disable."/>
                                 </Grid>
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="Thumbnail Settings" Padding="10" Margin="0,0,0,10" DataContext="{Binding ImageGeneration}">
+                        <GroupBox Header="Thumbnail Settings" Padding="10" Margin="0,0,0,10">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="180"/>
-                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions>
@@ -241,35 +251,27 @@
 
                                 <Label Grid.Row="0" Grid.Column="0" Content="Pexels Background Query:"/>
                                 <ComboBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" IsEditable="True"
-                                          Text="{Binding ThumbnailPexelsQuery, UpdateSourceTrigger=PropertyChanged}">
-                                    <x:Array Type="sys:String">
-                                        <sys:String>abstract background</sys:String>
-                                        <sys:String>person thinking</sys:String>
-                                        <sys:String>woman working on laptop</sys:String>
-                                        <sys:String>man looking surprised</sys:String>
-                                        <sys:String>dark pattern</sys:String>
-                                        <sys:String>colorful gradient</sys:String>
-                                    </x:Array>
-                                </ComboBox>
+                                          ItemsSource="{StaticResource ThumbnailBackgroundQueries}"
+                                          Text="{Binding DataContext.Settings.ImageGeneration.ThumbnailPexelsQuery, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged}"/>
 
                                 <Label Grid.Row="1" Grid.Column="0" Content="Font Size:"/>
-                                <Slider Grid.Row="1" Grid.Column="1" Minimum="50" Maximum="200" Value="{Binding ThumbnailFontSize}"/>
-                                <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding ThumbnailFontSize}" MinWidth="30"/>
+                                <Slider Grid.Row="1" Grid.Column="1" Minimum="50" Maximum="200" Value="{Binding DataContext.Settings.ImageGeneration.ThumbnailFontSize, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding DataContext.Settings.ImageGeneration.ThumbnailFontSize, RelativeSource={RelativeSource AncestorType=Window}}" MinWidth="30"/>
 
                                 <Label Grid.Row="2" Grid.Column="0" Content="Font Outline Width:"/>
-                                <Slider Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="20" Value="{Binding ThumbnailFontOutlineWidth}"/>
-                                <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding ThumbnailFontOutlineWidth}" MinWidth="30"/>
+                                <Slider Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="20" Value="{Binding DataContext.Settings.ImageGeneration.ThumbnailFontOutlineWidth, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding DataContext.Settings.ImageGeneration.ThumbnailFontOutlineWidth, RelativeSource={RelativeSource AncestorType=Window}}" MinWidth="30"/>
 
                                 <Label Grid.Row="3" Grid.Column="0" Content="Font Outline Color:"/>
-                                <TextBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding ThumbnailFontOutlineColor}"/>
+                                <TextBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding DataContext.Settings.ImageGeneration.ThumbnailFontOutlineColor, RelativeSource={RelativeSource AncestorType=Window}}"/>
                             </Grid>
                         </GroupBox>
 
-                        <GroupBox Header="Overlay &amp; Text Style" Padding="10" Margin="0,0,0,10" DataContext="{Binding ImageGeneration}">
-                            <Grid>
+                        <GroupBox Header="Overlay &amp; Text Style" Padding="10" Margin="0,0,0,10" >
+                            <Grid DataContext="{Binding DataContext.Settings.ImageGeneration, RelativeSource={RelativeSource AncestorType=Window}}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="180"/>
-                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions>
@@ -322,7 +324,7 @@
 
             <TabItem Header="YouTube and Export">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
-                    <StackPanel DataContext="{Binding Settings}">
+                    <StackPanel>
                         <GroupBox Header="YouTube API Setup" Padding="10" Margin="0,0,0,10">
                             <TextBlock TextWrapping="Wrap">
                                 To connect your YouTube account, please place your client_secrets.json file in the application's root folder.
@@ -336,10 +338,10 @@
                         </GroupBox>
 
                         <GroupBox Header="YouTube Upload Defaults" Padding="10" Margin="0,0,0,10">
-                            <Grid DataContext="{Binding YouTube}">
+                            <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="180"/>
-                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions>
@@ -349,7 +351,7 @@
 
                                 <Label Grid.Row="0" Grid.Column="0" Content="Default Upload Privacy:"/>
                                 <ComboBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" 
-                                          SelectedValue="{Binding PrivacyStatus}"
+                                          SelectedValue="{Binding DataContext.Settings.YouTube.PrivacyStatus, RelativeSource={RelativeSource AncestorType=Window}}"
                                           SelectedValuePath="Content">
                                     <ComboBoxItem Content="private"/>
                                     <ComboBoxItem Content="unlisted"/>
@@ -359,18 +361,18 @@
                                 <Label Grid.Row="1" Grid.Column="0" Content="Auto-Schedule Interval:"
                                        ToolTip="The time in minutes between each scheduled upload when using the auto-schedule feature."/>
                                 <Slider Grid.Row="1" Grid.Column="1" 
-                                        Value="{Binding AutoScheduleIntervalMinutes, Mode=TwoWay}" 
+                                        Value="{Binding DataContext.Settings.YouTube.AutoScheduleIntervalMinutes, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}" 
                                         Minimum="1" Maximum="1440" IsSnapToTickEnabled="True" TickFrequency="1"/>
                                 <TextBlock Grid.Row="1" Grid.Column="2" MinWidth="35"
-                                           Text="{Binding AutoScheduleIntervalMinutes, StringFormat='{}{0} min'}"/>
+                                           Text="{Binding DataContext.Settings.YouTube.AutoScheduleIntervalMinutes, RelativeSource={RelativeSource AncestorType=Window}, StringFormat='{}{0} min'}"/>
                             </Grid>
                         </GroupBox>
 
                         <GroupBox Header="Export &amp; Encoding Settings" Padding="10" Margin="0,0,0,10">
-                            <Grid DataContext="{Binding Ffmpeg}">
+                            <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="180"/>
-                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
@@ -382,11 +384,11 @@
 
                                 <Label Grid.Row="0" Grid.Column="0" Content="FFmpeg Directory:"
                                        ToolTip="The directory containing ffmpeg.exe and ffprobe.exe, relative to the application's main folder."/>
-                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding FfmpegDirectory, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding DataContext.Settings.Ffmpeg.FfmpegDirectory, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged}"/>
 
                                 <Label Grid.Row="1" Grid.Column="0" Content="Video Codec:"/>
                                 <ComboBox Grid.Row="1" Grid.Column="1" IsEditable="True"
-                                          Text="{Binding VideoCodec, UpdateSourceTrigger=PropertyChanged}">
+                                          Text="{Binding DataContext.Settings.Ffmpeg.VideoCodec, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged}">
                                     <sys:String>libx264</sys:String>
                                     <sys:String>libx265</sys:String>
                                     <sys:String>h264_nvenc</sys:String>
@@ -395,7 +397,7 @@
 
                                 <Label Grid.Row="2" Grid.Column="0" Content="Encoding Preset:"/>
                                 <ComboBox Grid.Row="2" Grid.Column="1"
-                                          SelectedValue="{Binding Preset}"
+                                          SelectedValue="{Binding DataContext.Settings.Ffmpeg.Preset, RelativeSource={RelativeSource AncestorType=Window}}"
                                           SelectedValuePath="Content">
                                     <ComboBoxItem Content="ultrafast"/>
                                     <ComboBoxItem Content="superfast"/>
@@ -409,10 +411,10 @@
                                 </ComboBox>
 
                                 <Label Grid.Row="3" Grid.Column="0" Content="Video Bitrate:"/>
-                                <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding VideoBitrate, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding DataContext.Settings.Ffmpeg.VideoBitrate, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged}"/>
 
                                 <Label Grid.Row="4" Grid.Column="0" Content="Audio Bitrate:"/>
-                                <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding AudioBitrate, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding DataContext.Ffmpeg.AudioBitrate, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged}"/>
                             </Grid>
                         </GroupBox>
                     </StackPanel>
@@ -421,9 +423,9 @@
 
             <TabItem Header="TikTok">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
-                    <StackPanel DataContext="{Binding Settings}">
+                    <StackPanel>
                         <GroupBox Header="TikTok API Settings" Padding="10" Margin="0,0,0,10">
-                            <Grid DataContext="{Binding TikTok}">
+                            <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
@@ -434,10 +436,10 @@
                                 </Grid.ColumnDefinitions>
 
                                 <Label Content="TikTok Client Key:" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center"/>
-                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding ClientKey, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="5,2"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding DataContext.Settings.TikTok.ClientKey, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="5,2"/>
 
                                 <Label Content="TikTok Client Secret:" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center"/>
-                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding ClientSecret, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="5,2"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding DataContext.Settings.TikTok.ClientSecret, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="5,2"/>
                             </Grid>
                         </GroupBox>
                     </StackPanel>
