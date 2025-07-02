@@ -279,27 +279,18 @@
             <TabItem Header="YouTube and Export">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
                     <StackPanel DataContext="{Binding Settings}">
-                        <GroupBox Header="YouTube API Settings" Padding="10" Margin="0,0,0,10">
-                            <StackPanel>
-                                <Grid>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" MinWidth="180"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <Label Grid.Row="0" Grid.Column="0" Content="YouTube Client ID:"/>
-                                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding YouTube.ClientId, UpdateSourceTrigger=PropertyChanged}"/>
-
-                                    <Label Grid.Row="1" Grid.Column="0" Content="YouTube Client Secret:"/>
-                                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding YouTube.ClientSecret, UpdateSourceTrigger=PropertyChanged}"/>
-                                </Grid>
-                                <Button Content="Load from client_secrets.json" HorizontalAlignment="Right" Margin="0,10,0,0" Padding="10,5"
-                                        Click="LoadYouTubeSecrets_Click" ToolTip="Load credentials directly from the JSON file downloaded from Google Cloud Console."/>
-                            </StackPanel>
+                        <GroupBox Header="YouTube API Setup" Padding="10" Margin="0,0,0,10">
+                            <TextBlock TextWrapping="Wrap">
+                                To connect your YouTube account, please place your client_secrets.json file in the application's root folder.
+                                <LineBreak/><LineBreak/>
+                                1. Download the credentials for your "Desktop app" OAuth Client from the Google Cloud Console.
+                                <LineBreak/>
+                                2. Rename the downloaded file to exactly <Bold>client_secrets.json</Bold>
+                                <LineBreak/>
+                                3. Copy the file into the following directory:
+                                <LineBreak/>
+                                <Bold>C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\bin\Debug\net9.0-windows</Bold>
+                            </TextBlock>
                         </GroupBox>
 
                         <GroupBox Header="YouTube Upload Defaults" Padding="10" Margin="0,0,0,10">

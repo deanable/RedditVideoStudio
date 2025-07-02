@@ -6136,7 +6136,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.Infrastructure")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+046c49cd6b280fc0e07c1a2bbc6563f59144edae")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f345223550deeb6d513d525e5f1516fdd320e0ab")]
 [assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.Infrastructure")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.Infrastructure")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
@@ -6169,7 +6169,7 @@ global using global::System.Windows.Forms;
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\obj\Debug\net9.0-windows\RedditVideoStudio.Infrastructure.sourcelink.json">
 <![CDATA[
-{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/046c49cd6b280fc0e07c1a2bbc6563f59144edae/*"}}
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/f345223550deeb6d513d525e5f1516fdd320e0ab/*"}}
 ]]>
 </File>
 
@@ -11040,6 +11040,8 @@ namespace RedditVideoStudio.Infrastructure.Services
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\Services\YouTubeDestination.cs">
 <![CDATA[
+// In: C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\Services\YouTubeDestination.cs
+
 namespace RedditVideoStudio.Infrastructure.Services
 {
     using Google.Apis.Auth.OAuth2;
@@ -11057,7 +11059,11 @@ namespace RedditVideoStudio.Infrastructure.Services
     using System.Threading.Tasks;
     using RedditVideoStudio.Core.Exceptions;
     using System.Text;
+    using Google.Apis.Auth.OAuth2.Responses;
 
+    /// <summary>
+    /// Represents the YouTube video destination, handling authentication and video uploads.
+    /// </summary>
     public class YouTubeDestination : IVideoDestination
     {
         private readonly IAppConfiguration _appConfig;
@@ -11066,31 +11072,53 @@ namespace RedditVideoStudio.Infrastructure.Services
         private readonly FileDataStore _fileDataStore;
         private const string CredentialDataStoreKey = "YouTube.Api.Auth.Store";
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="YouTubeDestination"/> class.
+        /// </summary>
+        /// <param name="appConfiguration">The application configuration service.</param>
+        /// <param name="logger">The logger instance.</param>
         public YouTubeDestination(IAppConfiguration appConfiguration, ILogger<YouTubeDestination> logger)
         {
             _appConfig = appConfiguration;
             _logger = logger;
+            // The FileDataStore caches the OAuth 2.0 tokens to avoid re-authenticating every time.
             _fileDataStore = new FileDataStore(Path.Combine(AppContext.BaseDirectory, CredentialDataStoreKey), true);
         }
 
+        /// <summary>
+        /// Gets the name of the destination.
+        /// </summary>
         public string Name => "YouTube";
+
+        /// <summary>
+        /// Gets a value indicating whether the user is currently authenticated.
+        /// It checks if the credential exists and if the access token has not expired.
+        /// </summary>
         public bool IsAuthenticated => _credential != null && !_credential.Token.IsExpired(_credential.Flow.Clock);
 
+        /// <summary>
+        /// Initiates the OAuth 2.0 authentication flow to obtain user credentials.
+        /// </summary>
+        /// <param name="cancellationToken">The cancellation token.</param>
         public async Task AuthenticateAsync(CancellationToken cancellationToken = default)
         {
+            var youtubeSettings = _appConfig.Settings.YouTube;
+            if (string.IsNullOrEmpty(youtubeSettings.ClientId) || string.IsNullOrEmpty(youtubeSettings.ClientSecret))
+            {
+                _logger.LogError("YouTube Client ID or Client Secret is not configured in settings.");
+                throw new AppConfigurationException("YouTube Client ID or Client Secret is not configured in settings. Please configure them in the Settings window.");
+            }
+
+            // Construct the client_secrets.json content dynamically from settings.
+            // This is crucial for the GoogleWebAuthorizationBroker to work correctly.
+            // The credentials MUST be for a "Desktop app" in your Google Cloud project.
+            var json = $"{{\"installed\":{{\"client_id\":\"{youtubeSettings.ClientId}\",\"client_secret\":\"{youtubeSettings.ClientSecret}\"}}}}";
+
             try
             {
-                var youtubeSettings = _appConfig.Settings.YouTube;
-                if (string.IsNullOrEmpty(youtubeSettings.ClientId) || string.IsNullOrEmpty(youtubeSettings.ClientSecret))
-                {
-                    throw new AppConfigurationException("YouTube Client ID or Client Secret is not configured in settings.");
-                }
-
-                var json = $"{{\"installed\":{{\"client_id\":\"{youtubeSettings.ClientId}\",\"client_secret\":\"{youtubeSettings.ClientSecret}\"}}}}";
-
                 await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-
                 var clientSecrets = await GoogleClientSecrets.FromStreamAsync(stream, cancellationToken);
+
                 _credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
                     clientSecrets.Secrets,
                     new[] { YouTubeService.Scope.YoutubeUpload },
@@ -11104,23 +11132,41 @@ namespace RedditVideoStudio.Infrastructure.Services
                 }
                 else
                 {
-                    _logger.LogError("Failed to authenticate with YouTube.");
+                    // This case is unlikely if no exception was thrown, but it's good practice.
+                    _logger.LogError("Failed to authenticate with YouTube. The user may have denied access.");
+                    throw new YouTubeApiException("Authentication was not successful. The user may have cancelled the operation.");
                 }
+            }
+            catch (TokenResponseException ex)
+            {
+                _logger.LogError(ex, "A token response error occurred during YouTube authentication. This usually means your Client ID/Secret is incorrect or your Google Cloud project is misconfigured. Error: {ErrorDetails}", ex.Error.ErrorDescription);
+                throw new YouTubeApiException($"Authentication failed. Please verify your Google Cloud credentials and project setup. Details: {ex.Error.ErrorDescription}", ex);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An exception occurred during YouTube authentication.");
-                throw;
+                _logger.LogError(ex, "An unexpected exception occurred during YouTube authentication.");
+                throw new YouTubeApiException("An unexpected error occurred during authentication.", ex);
             }
         }
 
+        /// <summary>
+        /// Signs the user out by clearing the stored credentials.
+        /// </summary>
         public async Task SignOutAsync()
         {
             _credential = null;
+            // CORRECTED: The DeleteAsync<T> method only takes one argument, the key.
             await _fileDataStore.DeleteAsync<string>("user");
             _logger.LogInformation("User has been signed out from YouTube, and stored credentials have been deleted.");
         }
 
+        /// <summary>
+        /// Uploads a video to YouTube, including its metadata and an optional thumbnail.
+        /// </summary>
+        /// <param name="videoPath">The local path of the video file to upload.</param>
+        /// <param name="videoDetails">The details (title, description, etc.) of the video.</param>
+        /// <param name="thumbnailPath">The local path of the thumbnail image (optional).</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
         public async Task UploadVideoAsync(string videoPath, VideoDetails videoDetails, string? thumbnailPath, CancellationToken cancellationToken = default)
         {
             if (!IsAuthenticated || _credential == null)
@@ -11141,16 +11187,16 @@ namespace RedditVideoStudio.Infrastructure.Services
                     Title = videoDetails.Title,
                     Description = videoDetails.Description,
                     Tags = videoDetails.Tags,
-                    CategoryId = "22", // People & Blogs
+                    CategoryId = "22", // People & Blogs - a default category
                 },
                 Status = new VideoStatus
                 {
-                    PrivacyStatus = "private"
+                    PrivacyStatus = "private" // Default to private, can be changed in settings
                 }
             };
 
             string videoId;
-            using (var fileStream = new FileStream(videoPath, FileMode.Open))
+            await using (var fileStream = new FileStream(videoPath, FileMode.Open))
             {
                 var videosInsertRequest = youtubeService.Videos.Insert(video, "snippet,status", fileStream, "video/*");
                 videosInsertRequest.ResponseReceived += (v) => videoId = v.Id;
@@ -14499,7 +14545,67 @@ namespace RedditVideoStudio.UI {
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\GeneratedInternalTypeHelper.g.cs">
 <![CDATA[
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//     Runtime Version:4.0.30319.42000
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
 
+namespace XamlGeneratedNamespace {
+    
+    
+    /// <summary>
+    /// GeneratedInternalTypeHelper
+    /// </summary>
+    [System.Diagnostics.DebuggerNonUserCodeAttribute()]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("PresentationBuildTasks", "9.0.6.0")]
+    [System.ComponentModel.EditorBrowsableAttribute(System.ComponentModel.EditorBrowsableState.Never)]
+    public sealed class GeneratedInternalTypeHelper : System.Windows.Markup.InternalTypeHelper {
+        
+        /// <summary>
+        /// CreateInstance
+        /// </summary>
+        protected override object CreateInstance(System.Type type, System.Globalization.CultureInfo culture) {
+            return System.Activator.CreateInstance(type, ((System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic) 
+                            | (System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.CreateInstance)), null, null, culture);
+        }
+        
+        /// <summary>
+        /// GetPropertyValue
+        /// </summary>
+        protected override object GetPropertyValue(System.Reflection.PropertyInfo propertyInfo, object target, System.Globalization.CultureInfo culture) {
+            return propertyInfo.GetValue(target, System.Reflection.BindingFlags.Default, null, null, culture);
+        }
+        
+        /// <summary>
+        /// SetPropertyValue
+        /// </summary>
+        protected override void SetPropertyValue(System.Reflection.PropertyInfo propertyInfo, object target, object value, System.Globalization.CultureInfo culture) {
+            propertyInfo.SetValue(target, value, System.Reflection.BindingFlags.Default, null, null, culture);
+        }
+        
+        /// <summary>
+        /// CreateDelegate
+        /// </summary>
+        protected override System.Delegate CreateDelegate(System.Type delegateType, object target, string handler) {
+            return ((System.Delegate)(target.GetType().InvokeMember("_CreateDelegate", (System.Reflection.BindingFlags.InvokeMethod 
+                            | (System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)), null, target, new object[] {
+                        delegateType,
+                        handler}, null)));
+        }
+        
+        /// <summary>
+        /// AddEventHandler
+        /// </summary>
+        protected override void AddEventHandler(System.Reflection.EventInfo eventInfo, object target, System.Delegate handler) {
+            eventInfo.AddEventHandler(target, handler);
+        }
+    }
+}
 
 
 ]]>
@@ -15007,7 +15113,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.UI")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+046c49cd6b280fc0e07c1a2bbc6563f59144edae")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+24b97a783099528deb07b1c00996503de35c7ecd")]
 [assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.UI")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.UI")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
@@ -16806,7 +16912,7 @@ global using global::System.Threading.Tasks;
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI.sourcelink.json">
 <![CDATA[
-{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/046c49cd6b280fc0e07c1a2bbc6563f59144edae/*"}}
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/24b97a783099528deb07b1c00996503de35c7ecd/*"}}
 ]]>
 </File>
 
@@ -18049,6 +18155,58 @@ global using global::System.Threading.Tasks;
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_hhigqumz_wpftmp.sourcelink.json">
 <![CDATA[
 {"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/a169e534e48d0dc4efce3153a53593cbda7d5622/*"}}
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_iia5lw00_wpftmp.AssemblyInfo.cs">
+<![CDATA[
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//     Runtime Version:4.0.30319.42000
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+24b97a783099528deb07b1c00996503de35c7ecd")]
+[assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
+
+// Generated by the MSBuild WriteCodeFragment class.
+
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_iia5lw00_wpftmp.GlobalUsings.g.cs">
+<![CDATA[
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.Linq;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_iia5lw00_wpftmp.sourcelink.json">
+<![CDATA[
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/24b97a783099528deb07b1c00996503de35c7ecd/*"}}
 ]]>
 </File>
 
@@ -20237,6 +20395,58 @@ global using global::System.Threading.Tasks;
 </File>
 
 
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_wylzpu11_wpftmp.AssemblyInfo.cs">
+<![CDATA[
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//     Runtime Version:4.0.30319.42000
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f345223550deeb6d513d525e5f1516fdd320e0ab")]
+[assembly: System.Reflection.AssemblyProductAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyTitleAttribute("RedditVideoStudio.UI")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
+
+// Generated by the MSBuild WriteCodeFragment class.
+
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_wylzpu11_wpftmp.GlobalUsings.g.cs">
+<![CDATA[
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.Linq;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+]]>
+</File>
+
+
+<File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_wylzpu11_wpftmp.sourcelink.json">
+<![CDATA[
+{"documents":{"C:\\Users\\Dean Kruger\\source\\repos\\RedditVideoStudio\\*":"https://raw.githubusercontent.com/deanable/RedditVideoStudio/f345223550deeb6d513d525e5f1516fdd320e0ab/*"}}
+]]>
+</File>
+
+
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\RedditVideoStudio.UI_xg0mw3tb_wpftmp.AssemblyInfo.cs">
 <![CDATA[
 //------------------------------------------------------------------------------
@@ -20707,7 +20917,7 @@ global using global::System.Threading.Tasks;
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\SettingsWindow.g.cs">
 <![CDATA[
-#pragma checksum "..\..\..\SettingsWindow.xaml" "{ff1816ec-aa5e-4d10-87f7-6f4963833460}" "B925B5DA84AA322AAEC59053881C67BC4E4297A2"
+#pragma checksum "..\..\..\SettingsWindow.xaml" "{ff1816ec-aa5e-4d10-87f7-6f4963833460}" "2257C81FBA3494C4CCBE802126A8E1C016FDFE61"
 //------------------------------------------------------------------------------
 // <auto-generated>
 //     This code was generated by a tool.
@@ -20857,6 +21067,14 @@ namespace RedditVideoStudio.UI {
             return;
             case 8:
             this.OutroDurationSlider = ((System.Windows.Controls.Slider)(target));
+            return;
+            case 9:
+            
+            #line 301 "..\..\..\SettingsWindow.xaml"
+            ((System.Windows.Controls.Button)(target)).Click += new System.Windows.RoutedEventHandler(this.LoadYouTubeSecrets_Click);
+            
+            #line default
+            #line hidden
             return;
             }
             this._contentLoaded = true;
@@ -20871,7 +21089,7 @@ namespace RedditVideoStudio.UI {
 
 <File Path="C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\obj\Debug\net9.0-windows\SettingsWindow.g.i.cs">
 <![CDATA[
-#pragma checksum "..\..\..\SettingsWindow.xaml" "{ff1816ec-aa5e-4d10-87f7-6f4963833460}" "B925B5DA84AA322AAEC59053881C67BC4E4297A2"
+#pragma checksum "..\..\..\SettingsWindow.xaml" "{ff1816ec-aa5e-4d10-87f7-6f4963833460}" "2257C81FBA3494C4CCBE802126A8E1C016FDFE61"
 //------------------------------------------------------------------------------
 // <auto-generated>
 //     This code was generated by a tool.
@@ -21021,6 +21239,14 @@ namespace RedditVideoStudio.UI {
             return;
             case 8:
             this.OutroDurationSlider = ((System.Windows.Controls.Slider)(target));
+            return;
+            case 9:
+            
+            #line 301 "..\..\..\SettingsWindow.xaml"
+            ((System.Windows.Controls.Button)(target)).Click += new System.Windows.RoutedEventHandler(this.LoadYouTubeSecrets_Click);
+            
+            #line default
+            #line hidden
             return;
             }
             this._contentLoaded = true;
@@ -43647,22 +43873,26 @@ namespace RedditVideoStudio.UI
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
                     <StackPanel DataContext="{Binding Settings}">
                         <GroupBox Header="YouTube API Settings" Padding="10" Margin="0,0,0,10">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" MinWidth="180"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" MinWidth="180"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
 
-                                <Label Grid.Row="0" Grid.Column="0" Content="YouTube Client ID:"/>
-                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding YouTube.ClientId, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <Label Grid.Row="0" Grid.Column="0" Content="YouTube Client ID:"/>
+                                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding YouTube.ClientId, UpdateSourceTrigger=PropertyChanged}"/>
 
-                                <Label Grid.Row="1" Grid.Column="0" Content="YouTube Client Secret:"/>
-                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding YouTube.ClientSecret, UpdateSourceTrigger=PropertyChanged}"/>
-                            </Grid>
+                                    <Label Grid.Row="1" Grid.Column="0" Content="YouTube Client Secret:"/>
+                                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding YouTube.ClientSecret, UpdateSourceTrigger=PropertyChanged}"/>
+                                </Grid>
+                                <Button Content="Load from client_secrets.json" HorizontalAlignment="Right" Margin="0,10,0,0" Padding="10,5"
+                                        Click="LoadYouTubeSecrets_Click" ToolTip="Load credentials directly from the JSON file downloaded from Google Cloud Console."/>
+                            </StackPanel>
                         </GroupBox>
 
                         <GroupBox Header="YouTube Upload Defaults" Padding="10" Margin="0,0,0,10">
@@ -43776,7 +44006,6 @@ namespace RedditVideoStudio.UI
         </TabControl>
     </DockPanel>
 </Window>
-
 ]]>
 </File>
 
@@ -43786,13 +44015,19 @@ namespace RedditVideoStudio.UI
 using Microsoft.Win32;
 using RedditVideoStudio.Core.Interfaces;
 using RedditVideoStudio.Infrastructure.Services;
+using RedditVideoStudio.Shared.Configuration;
 using RedditVideoStudio.UI.ViewModels;
 using System;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Windows;
 
 namespace RedditVideoStudio.UI
 {
+    /// <summary>
+    /// Interaction logic for the settings window.
+    /// </summary>
     public partial class SettingsWindow : Window
     {
         private readonly SettingsViewModel _viewModel;
@@ -43800,6 +44035,9 @@ namespace RedditVideoStudio.UI
         private readonly IFfmpegService _ffmpegService;
         private readonly WindowsTextToSpeechService _windowsTtsService;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SettingsWindow"/> class.
+        /// </summary>
         public SettingsWindow(
             SettingsViewModel viewModel,
             ISettingsService settingsService,
@@ -43813,25 +44051,34 @@ namespace RedditVideoStudio.UI
             _ffmpegService = ffmpegService;
             _windowsTtsService = windowsTtsService;
 
+            // Load existing settings into the ViewModel
             _viewModel.Settings = _settingsService.GetSettings();
+
+            // Populate the list of available Windows TTS voices
             _viewModel.Voices = _windowsTtsService.GetVoices().ToList();
 
             DataContext = _viewModel;
         }
 
+        /// <summary>
+        /// Handles the click event for the "Save and Close" button.
+        /// </summary>
         private void SaveAndClose_Click(object sender, RoutedEventArgs e)
         {
-            // First, update the settings dictionary from the viewmodel states
+            // First, update the settings dictionary for enabled destinations from the viewmodel states
             foreach (var destVm in _viewModel.Destinations.Destinations)
             {
                 _viewModel.Settings.EnabledDestinations[destVm.Name] = destVm.IsEnabled;
             }
 
-            // Now, save the updated settings object
+            // Now, save the updated settings object to the registry (or other persistence mechanism)
             _settingsService.SaveSettings(_viewModel.Settings);
             DialogResult = true;
             Close();
         }
+
+        // Event handlers for video file selection dialogs
+        #region Video File Dialogs
 
         private async void IntroHyperlink_Click(object sender, RoutedEventArgs e)
         {
@@ -43890,6 +44137,9 @@ namespace RedditVideoStudio.UI
             }
         }
 
+        /// <summary>
+        /// Shows a file dialog for selecting video files.
+        /// </summary>
         private string ShowVideoFileDialog(string title)
         {
             var openFileDialog = new OpenFileDialog
@@ -43898,6 +44148,64 @@ namespace RedditVideoStudio.UI
                 Title = title
             };
             return openFileDialog.ShowDialog() == true ? openFileDialog.FileName : string.Empty;
+        }
+
+        #endregion
+
+        /// <summary>
+        /// Handles the click event for the "Load from client_secrets.json" button.
+        /// </summary>
+        private void LoadYouTubeSecrets_Click(object sender, RoutedEventArgs e)
+        {
+            var openFileDialog = new OpenFileDialog
+            {
+                Title = "Select client_secrets.json",
+                Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*"
+            };
+
+            if (openFileDialog.ShowDialog() == true)
+            {
+                try
+                {
+                    var jsonContent = File.ReadAllText(openFileDialog.FileName);
+
+                    // Parse the JSON to find the 'installed' object which contains credentials for desktop apps.
+                    using var jsonDoc = JsonDocument.Parse(jsonContent);
+                    if (jsonDoc.RootElement.TryGetProperty("installed", out var installedElement) &&
+                        installedElement.TryGetProperty("client_id", out var clientIdElement) &&
+                        installedElement.TryGetProperty("client_secret", out var clientSecretElement))
+                    {
+                        var clientId = clientIdElement.GetString();
+                        var clientSecret = clientSecretElement.GetString();
+
+                        if (!string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(clientSecret))
+                        {
+                            // To ensure the UI updates, we replace the Settings object with a new instance
+                            // containing the updated credentials. This triggers the OnPropertyChanged event.
+                            var updatedSettings = _settingsService.GetSettings(); // Get a fresh copy
+                            updatedSettings.YouTube.ClientId = clientId;
+                            updatedSettings.YouTube.ClientSecret = clientSecret;
+
+                            // Re-assigning the property on the ViewModel will notify the UI to refresh.
+                            _viewModel.Settings = updatedSettings;
+
+                            MessageBox.Show("YouTube API credentials loaded successfully from file.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                        }
+                        else
+                        {
+                            throw new JsonException("The JSON file is missing the 'client_id' or 'client_secret'.");
+                        }
+                    }
+                    else
+                    {
+                        throw new JsonException("The selected JSON file is not a valid Google Cloud client_secrets file for a Desktop App. It must contain an 'installed' property.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Failed to load or parse the JSON file.\n\nError: {ex.Message}", "File Load Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
         }
     }
 }
