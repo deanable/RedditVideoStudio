@@ -279,7 +279,26 @@
             <TabItem Header="YouTube and Export">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
                     <StackPanel DataContext="{Binding Settings}">
-                        <GroupBox Header="YouTube Settings" Padding="10" Margin="0,0,0,10">
+                        <GroupBox Header="YouTube API Settings" Padding="10" Margin="0,0,0,10">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="180"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Label Grid.Row="0" Grid.Column="0" Content="YouTube Client ID:"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding YouTube.ClientId, UpdateSourceTrigger=PropertyChanged}"/>
+
+                                <Label Grid.Row="1" Grid.Column="0" Content="YouTube Client Secret:"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding YouTube.ClientSecret, UpdateSourceTrigger=PropertyChanged}"/>
+                            </Grid>
+                        </GroupBox>
+
+                        <GroupBox Header="YouTube Upload Defaults" Padding="10" Margin="0,0,0,10">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="180"/>
@@ -303,7 +322,7 @@
                                 <Label Grid.Row="1" Grid.Column="0" Content="Auto-Schedule Interval:"
                                        ToolTip="The time in minutes between each scheduled upload when using the auto-schedule feature."/>
                                 <Slider Grid.Row="1" Grid.Column="1" 
-                                        Value="{Binding YouTube.AutoScheduleIntervalMinutes}" 
+                                        Value="{Binding YouTube.AutoScheduleIntervalMinutes, Mode=TwoWay}" 
                                         Minimum="1" Maximum="1440" IsSnapToTickEnabled="True" TickFrequency="1"/>
                                 <TextBlock Grid.Row="1" Grid.Column="2" MinWidth="35"
                                            Text="{Binding YouTube.AutoScheduleIntervalMinutes, StringFormat='{}{0} min'}"/>

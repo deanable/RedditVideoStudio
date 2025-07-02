@@ -1,17 +1,15 @@
-﻿using Microsoft.Extensions.Logging;
-using Microsoft.Win32;
-using Google.Apis.Auth.OAuth2;
-using RedditVideoStudio.Core.Exceptions;
-using RedditVideoStudio.Core.Interfaces;
-using RedditVideoStudio.Shared.Configuration;
-using System;
-using System.Globalization;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Text.Json;
-
-namespace RedditVideoStudio.Infrastructure.Services
+﻿namespace RedditVideoStudio.Infrastructure.Services
 {
+    using Microsoft.Extensions.Logging;
+    using Microsoft.Win32;
+    using RedditVideoStudio.Core.Exceptions;
+    using RedditVideoStudio.Core.Interfaces;
+    using RedditVideoStudio.Shared.Configuration;
+    using System;
+    using System.Globalization;
+    using System.Threading;
+    using System.Threading.Tasks;
+
     public class RegistryAppConfiguration : IAppConfiguration
     {
         private const string BaseRegistryKey = @"Software\RedditVideoStudio";
@@ -66,36 +64,6 @@ namespace RedditVideoStudio.Infrastructure.Services
         public async Task SaveAsync(CancellationToken cancellationToken = default)
         {
             await Task.Run(() => Save(), cancellationToken);
-        }
-
-        public Task<ClientSecrets> GetYouTubeSecretsAsync(CancellationToken cancellationToken = default)
-        {
-            try
-            {
-                using var youtubeKey = Registry.CurrentUser.OpenSubKey($@"{BaseRegistryKey}\YouTubeSecrets");
-                if (youtubeKey == null)
-                {
-                    throw new AppConfigurationException("YouTube secrets not found in the registry. Please ensure the .reg file has been imported.");
-                }
-
-                var secrets = new ClientSecrets
-                {
-                    ClientId = youtubeKey.GetValue("client_id") as string ?? string.Empty,
-                    ClientSecret = youtubeKey.GetValue("client_secret") as string ?? string.Empty,
-                };
-
-                if (string.IsNullOrEmpty(secrets.ClientId) || string.IsNullOrEmpty(secrets.ClientSecret))
-                {
-                    throw new AppConfigurationException("YouTube client_id or client_secret is missing from the registry.");
-                }
-
-                return Task.FromResult(secrets);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to retrieve YouTube secrets from the registry.");
-                throw new AppConfigurationException("Failed to retrieve YouTube secrets.", ex);
-            }
         }
 
         private AppSettings LoadSettings()

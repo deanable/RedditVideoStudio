@@ -1,16 +1,21 @@
 ﻿namespace RedditVideoStudio.Shared.Configuration
 {
     /// <summary>
-    /// Contains settings related to uploading videos to YouTube,
-    /// such as the default privacy status for new uploads.
+    /// Contains settings related to uploading videos to YouTube.
     /// </summary>
     public class YouTubeSettings
     {
         public string PrivacyStatus { get; set; } = "private"; // "private", "unlisted", or "public"
+        public int AutoScheduleIntervalMinutes { get; set; } = 30;
 
         /// <summary>
-        /// The interval in minutes to wait between automatically scheduled video uploads.
+        /// The Client ID for your YouTube application from Google Cloud Console.
         /// </summary>
-        public int AutoScheduleIntervalMinutes { get; set; } = 30;
+        public string ClientId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The Client Secret for your YouTube application from Google Cloud Console.
+        /// </summary>
+        public string ClientSecret { get; set; } = string.Empty;
     }
 }

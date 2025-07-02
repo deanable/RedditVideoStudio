@@ -41,7 +41,7 @@ namespace RedditVideoStudio.UI
         private IHost ConfigureHost()
         {
             return Microsoft.Extensions.Hosting.Host.CreateDefaultBuilder()
-                .UseSerilog() // Use Serilog for logging throughout the application.
+                .UseSerilog()
                 .ConfigureServices((context, services) =>
                 {
                     services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(ApplicationAssemblyReference).Assembly));
@@ -49,10 +49,9 @@ namespace RedditVideoStudio.UI
                     // Register Destination Services
                     services.AddSingleton<IVideoDestination, YouTubeDestination>();
                     services.AddSingleton<IVideoDestination, TikTokDestination>();
+                    services.AddSingleton<IVideoDestination, InstagramDestination>();
 
                     services.AddSingleton<ISettingsService, SettingsService>();
-
-                    // Register other application services
                     services.AddSingleton<IAppConfiguration, RegistryAppConfiguration>();
                     services.AddSingleton<IRedditService, RedditService>();
                     services.AddSingleton<IPexelsService, PexelsService>();
@@ -61,27 +60,20 @@ namespace RedditVideoStudio.UI
                     services.AddSingleton<IFfmpegService, FfmpegService>();
                     services.AddSingleton<IYouTubeServiceFactory, YouTubeServiceFactory>();
                     services.AddSingleton<ITempDirectoryFactory, TempDirectoryFactory>();
-
-                    // TikTok Services
                     services.AddSingleton<ITikTokServiceFactory, TikTokServiceFactory>();
                     services.AddSingleton<TikTokAuthService>();
-
-                    // Register all TTS implementations as singletons
                     services.AddSingleton<GoogleTextToSpeechService>();
                     services.AddSingleton<AzureTextToSpeechService>();
                     services.AddSingleton<ElevenLabsTextToSpeechService>();
                     services.AddSingleton<WindowsTextToSpeechService>();
-
-                    // Register services with transient lifetime, meaning a new instance is created each time.
                     services.AddTransient<IStoryboardGenerator, StoryboardGenerator>();
                     services.AddTransient<IVideoSegmentGenerator, VideoSegmentGenerator>();
                     services.AddSingleton<IVideoComposer, VideoComposer>();
+                    services.AddSingleton<IPublishingService, PublishingService>();
 
-                    // TTS Factory to select the provider based on settings
                     services.AddTransient<ITextToSpeechService>(serviceProvider =>
                     {
                         var configService = serviceProvider.GetRequiredService<IAppConfiguration>();
-                        var logger = serviceProvider.GetRequiredService<ILogger<ITextToSpeechService>>();
                         var provider = configService.Settings.Tts.Provider;
                         switch (provider?.ToLower())
                         {
@@ -96,11 +88,8 @@ namespace RedditVideoStudio.UI
                         }
                     });
 
-                    // ViewModels
                     services.AddSingleton<SettingsViewModel>();
                     services.AddSingleton<DestinationsSettingsViewModel>();
-
-                    // UI Windows
                     services.AddSingleton<MainWindow>();
                     services.AddTransient<SettingsWindow>();
                 }).Build();

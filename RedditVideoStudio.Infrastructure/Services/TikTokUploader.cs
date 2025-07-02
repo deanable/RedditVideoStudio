@@ -1,14 +1,16 @@
-﻿using Flurl.Http;
-using Microsoft.Extensions.Logging;
-using RedditVideoStudio.Core.Exceptions;
-using RedditVideoStudio.Core.Interfaces;
-using System.IO;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace RedditVideoStudio.Infrastructure.Services
+﻿namespace RedditVideoStudio.Infrastructure.Services
 {
+    using Flurl.Http;
+    using Microsoft.Extensions.Logging;
+    using RedditVideoStudio.Core.Exceptions;
+    using RedditVideoStudio.Core.Interfaces;
+    using System.IO;
+    using System.Net.Http;
+    using System.Text.Json;
+    using System.Threading;
+    using System.Threading.Tasks;
+    using System.Text.Json.Serialization;
+
     public class TikTokUploader : ITikTokUploadService
     {
         private readonly ILogger<TikTokUploader> _logger;
@@ -22,39 +24,64 @@ namespace RedditVideoStudio.Infrastructure.Services
 
         public async Task UploadVideoAsync(string videoPath, string title, CancellationToken cancellationToken = default)
         {
-            _logger.LogInformation("TikTokUploader: Starting upload process for '{Title}'.", title);
+            _logger.LogInformation("Initiating TikTok upload for '{Title}'.", title);
 
-            var requestBody = new
+            var initRequestBody = new
             {
-                post_info = new
-                {
-                    title = title,
-                    privacy_level = "PUBLIC_TO_SELF",
-                },
-                source_info = new
-                {
-                    source = "FILE_UPLOAD",
-                    video_size = new FileInfo(videoPath).Length,
-                }
+                post_info = new { title = title },
+                source_info = new { source = "FILE_UPLOAD", video_size = new FileInfo(videoPath).Length }
             };
 
             try
             {
-                var response = await "https://open.tiktokapis.com/v2/post/publish/video/init/"
+                // 1. Initialize the upload
+                var initResponse = await "https://open.tiktokapis.com/v2/post/publish/video/init/"
                     .WithOAuthBearerToken(_accessToken)
-                    .PostJsonAsync(requestBody, HttpCompletionOption.ResponseContentRead, cancellationToken);
+                    .PostJsonAsync(initRequestBody, cancellationToken: cancellationToken)
+                    .ReceiveJson<TikTokInitResponse>();
 
-                var responseString = await response.GetStringAsync();
-                _logger.LogInformation("Successfully initiated TikTok upload. Response: {Response}", responseString);
-                _logger.LogWarning("TikTokUploader: Video upload is not fully implemented. The video file was NOT uploaded.");
+                if (initResponse?.Data?.UploadUrl == null)
+                {
+                    throw new ApiException("Failed to get upload URL from TikTok.");
+                }
 
+                _logger.LogInformation("TikTok upload initialized. Uploading video file to the provided URL.");
+
+                // 2. Upload the video file
+                var videoBytes = await File.ReadAllBytesAsync(videoPath, cancellationToken);
+                var uploadResponse = await initResponse.Data.UploadUrl
+                    .WithHeader("Content-Type", "video/mp4")
+                    .PutAsync(new ByteArrayContent(videoBytes), cancellationToken: cancellationToken);
+
+                if (!uploadResponse.ResponseMessage.IsSuccessStatusCode)
+                {
+                    var errorBody = await uploadResponse.ResponseMessage.Content.ReadAsStringAsync(cancellationToken);
+                    throw new ApiException($"TikTok video file upload failed with status {uploadResponse.StatusCode}. Details: {errorBody}");
+                }
+
+                _logger.LogInformation("Video file successfully uploaded to TikTok's servers. Publish ID: {PublishId}", initResponse.Data.PublishId);
+                // Note: TikTok processes the video asynchronously. No further action is needed here.
             }
             catch (FlurlHttpException ex)
             {
                 var error = await ex.GetResponseStringAsync();
-                _logger.LogError(ex, "Failed to initiate TikTok upload. Response: {Error}", error);
-                throw new ApiException($"Failed to initiate TikTok upload: {error}", ex);
+                _logger.LogError(ex, "Failed to upload to TikTok. Response: {Error}", error);
+                throw new ApiException($"Failed to upload to TikTok: {error}", ex);
             }
+        }
+
+        private class TikTokInitResponse
+        {
+            [JsonPropertyName("data")]
+            public TikTokInitData? Data { get; set; }
+        }
+
+        private class TikTokInitData
+        {
+            [JsonPropertyName("upload_url")]
+            public string? UploadUrl { get; set; }
+            [JsonPropertyName("publish_id")]
+            public string? PublishId { get; set; }
         }
     }
 }

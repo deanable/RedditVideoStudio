@@ -24,7 +24,7 @@ namespace RedditVideoStudio.UI
         private readonly IServiceProvider _serviceProvider;
         private readonly IRedditService _redditService;
         private readonly IAppConfiguration _configService;
-        private readonly IVideoComposer _videoComposer;
+        private readonly IPublishingService _publishingService;
 
         private readonly ObservableCollection<RedditPostViewModel> _fetchedPosts = new();
         private CancellationTokenSource _cancellationTokenSource = new();
@@ -34,7 +34,7 @@ namespace RedditVideoStudio.UI
              IServiceProvider serviceProvider,
              IRedditService redditService,
              IAppConfiguration configService,
-             IVideoComposer videoComposer)
+             IPublishingService publishingService)
         {
             InitializeComponent();
 
@@ -42,7 +42,7 @@ namespace RedditVideoStudio.UI
             _serviceProvider = serviceProvider;
             _redditService = redditService;
             _configService = configService;
-            _videoComposer = videoComposer;
+            _publishingService = publishingService;
 
             RedditPostListBox.ItemsSource = _fetchedPosts;
             var textBoxSink = new TextBoxSink(LogTextBox, Dispatcher);
@@ -61,12 +61,12 @@ namespace RedditVideoStudio.UI
                 return;
             }
 
-            var enabledDestinations = _configService.Settings.EnabledDestinations
+            var enabledDestinationNames = _configService.Settings.EnabledDestinations
                 .Where(kvp => kvp.Value)
-                .Select(kvp => _serviceProvider.GetServices<IVideoDestination>().First(s => s.Name == kvp.Key))
+                .Select(kvp => kvp.Key)
                 .ToList();
 
-            if (!enabledDestinations.Any())
+            if (!enabledDestinationNames.Any())
             {
                 MessageBox.Show("No destination platforms are enabled. Please enable and connect at least one in Settings.", "No Destinations", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
@@ -83,38 +83,27 @@ namespace RedditVideoStudio.UI
 
             try
             {
-                foreach (var destination in enabledDestinations)
-                {
-                    if (!destination.IsAuthenticated)
-                    {
-                        await destination.AuthenticateAsync(_cancellationTokenSource.Token);
-                    }
-                }
-
                 foreach (var post in selectedPosts)
                 {
-                    foreach (var destination in enabledDestinations)
+                    _cancellationTokenSource.Token.ThrowIfCancellationRequested();
+
+                    var postData = new RedditPostData
                     {
-                        _cancellationTokenSource.Token.ThrowIfCancellationRequested();
+                        Title = post.Title ?? string.Empty,
+                        Comments = post.Comments
+                    };
 
-                        var orientation = destination.Name == "TikTok" ? "Portrait" : "Landscape";
-                        _logger.LogInformation("Processing post '{Title}' for destination '{Destination}' with orientation '{Orientation}'", post.Title, destination.Name, orientation);
-
-                        string outputDir = Path.Combine(AppContext.BaseDirectory, "output");
-                        Directory.CreateDirectory(outputDir);
-                        string baseFilename = Shared.Utilities.FileUtils.SanitizeFileName(post.Title ?? string.Empty).Take(40).Aggregate("", (s, c) => s + c);
-                        string finalVideoPath = Path.Combine(outputDir, $"{baseFilename}_{destination.Name}.mp4");
-
-                        await _videoComposer.ComposeVideoAsync(post.Title ?? "", post.Comments, progress, _cancellationTokenSource.Token, finalVideoPath, orientation);
-
-                        await destination.UploadVideoAsync(finalVideoPath, new VideoDetails { Title = post.Title ?? "" }, _cancellationTokenSource.Token);
-                    }
+                    await _publishingService.PublishVideoAsync(postData, enabledDestinationNames, progress, _cancellationTokenSource.Token);
                 }
-                MessageBox.Show("All tasks completed!", "Done", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("All publishing tasks completed!", "Done", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
                 HandleException(ex);
+            }
+            finally
+            {
+                GenerationProgressBar.Value = 0;
             }
         }
 
