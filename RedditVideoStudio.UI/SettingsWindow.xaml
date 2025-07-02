@@ -65,13 +65,26 @@
                                           Text="{Binding Reddit.Subreddit, UpdateSourceTrigger=PropertyChanged}">
                                     <ComboBox.ItemsSource>
                                         <x:Array Type="sys:String">
-                                            <sys:String>askreddit</sys:String>
-                                            <sys:String>amitheasshole</sys:String>
+                                            <sys:String>AskReddit</sys:String>
+                                            <sys:String>AmItheAsshole</sys:String>
                                             <sys:String>tifu</sys:String>
-                                            <sys:String>nosleep</sys:String>
-                                            <sys:String>talesfromtechsupport</sys:String>
-                                            <sys:String>askmen</sys:String>
-                                            <sys:String>askwomen</sys:String>
+                                            <sys:String>confession</sys:String>
+                                            <sys:String>NoSleep</sys:String>
+                                            <sys:String>relationships</sys:String>
+                                            <sys:String>relationship_advice</sys:String>
+                                            <sys:String>pettyrevenge</sys:String>
+                                            <sys:String>prorevenge</sys:String>
+                                            <sys:String>MaliciousCompliance</sys:String>
+                                            <sys:String>IDontWorkHereLady</sys:String>
+                                            <sys:String>TalesFromRetail</sys:String>
+                                            <sys:String>TalesFromTechSupport</sys:String>
+                                            <sys:String>Glitch_in_the_Matrix</sys:String>
+                                            <sys:String>LetsNotMeet</sys:String>
+                                            <sys:String>UnresolvedMysteries</sys:String>
+                                            <sys:String>explainlikeimfive</sys:String>
+                                            <sys:String>AskMen</sys:String>
+                                            <sys:String>AskWomen</sys:String>
+                                            <sys:String>HFY</sys:String>
                                         </x:Array>
                                     </ComboBox.ItemsSource>
                                 </ComboBox>
