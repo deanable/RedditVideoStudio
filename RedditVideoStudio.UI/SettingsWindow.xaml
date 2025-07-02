@@ -421,25 +421,11 @@
                 </ScrollViewer>
             </TabItem>
 
-            <TabItem Header="TikTok">
+            <TabItem Header="TikTok" Visibility="Collapsed">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
-                    <StackPanel>
+                    <StackPanel DataContext="{Binding Settings}">
                         <GroupBox Header="TikTok API Settings" Padding="10" Margin="0,0,0,10">
                             <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" MinWidth="180" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-
-                                <Label Content="TikTok Client Key:" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center"/>
-                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding DataContext.Settings.TikTok.ClientKey, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="5,2"/>
-
-                                <Label Content="TikTok Client Secret:" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center"/>
-                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding DataContext.Settings.TikTok.ClientSecret, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="5,2"/>
                             </Grid>
                         </GroupBox>
                     </StackPanel>

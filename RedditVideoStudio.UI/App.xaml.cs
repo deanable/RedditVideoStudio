@@ -48,7 +48,7 @@ namespace RedditVideoStudio.UI
 
                     // Register Destination Services
                     services.AddSingleton<IVideoDestination, YouTubeDestination>();
-                    services.AddSingleton<IVideoDestination, TikTokDestination>();
+                    services.AddSingleton<IVideoDestination, TikTokVideoDestination>();
                     services.AddSingleton<IVideoDestination, InstagramDestination>();
 
                     services.AddSingleton<ISettingsService, SettingsService>();

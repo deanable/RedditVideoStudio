@@ -1,52 +1,52 @@
-﻿namespace RedditVideoStudio.Infrastructure.Services
+﻿// In: C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\Services\TikTokVideoDestination.cs
+namespace RedditVideoStudio.Infrastructure.Services
 {
-    using Microsoft.Extensions.Logging;
+    using Google.Protobuf.WellKnownTypes;
     using RedditVideoStudio.Core.Interfaces;
     using RedditVideoStudio.Domain.Models;
     using System;
     using System.Threading;
     using System.Threading.Tasks;
+    using static Google.Protobuf.Compiler.CodeGeneratorResponse.Types;
 
-    public class TikTokDestination : IVideoDestination
+    /// <summary>
+    /// A placeholder implementation for a TikTok video destination.
+    /// This service is registered but not fully functional, similar to the Instagram placeholder.
+    /// </summary>
+    public class TikTokVideoDestination : IVideoDestination
     {
-        private readonly TikTokAuthService _authService;
-        private readonly ITikTokServiceFactory _tikTokServiceFactory;
-        private readonly ILogger<TikTokDestination> _logger;
-        private string? _accessToken;
-
+        /// <summary>
+        /// Gets the name of the destination.
+        /// </summary>
         public string Name => "TikTok";
-        public bool IsAuthenticated => !string.IsNullOrEmpty(_accessToken);
 
-        public TikTokDestination(TikTokAuthService authService, ITikTokServiceFactory tikTokServiceFactory, ILogger<TikTokDestination> logger)
+        /// <summary>
+        /// Gets a value indicating whether the user is authenticated.This is always false for the placeholder.
+        /// </summary>
+        public bool IsAuthenticated => false;
+
+        /// <summary>
+        /// Throws NotImplementedException because this feature is not available.
+        /// </summary>
+        public Task AuthenticateAsync(CancellationToken cancellationToken = default)
         {
-            _authService = authService;
-            _tikTokServiceFactory = tikTokServiceFactory;
-            _logger = logger;
+            throw new NotImplementedException("TikTok uploading is not yet supported in this version.");
         }
 
-        public async Task AuthenticateAsync(CancellationToken cancellationToken = default)
-        {
-            _logger.LogInformation("Starting TikTok authentication flow...");
-            _accessToken = await _authService.AuthorizeAndGetTokenAsync(cancellationToken);
-            _logger.LogInformation("TikTok authentication successful. Access token obtained.");
-        }
-
+        /// <summary>
+        /// Throws NotImplementedException because this feature is not available.
+        /// </summary>
         public Task SignOutAsync()
         {
-            _accessToken = null;
-            _logger.LogInformation("Signed out from TikTok.");
-            return Task.CompletedTask;
+            throw new NotImplementedException("TikTok uploading is not yet supported in this version.");
         }
 
+        /// <summary>
+        /// Throws NotImplementedException because this feature is not available.
+        /// </summary>
         public Task UploadVideoAsync(string videoPath, VideoDetails videoDetails, string? thumbnailPath, CancellationToken cancellationToken = default)
         {
-            if (string.IsNullOrEmpty(_accessToken))
-            {
-                throw new InvalidOperationException("Not authenticated with TikTok.");
-            }
-            // TikTok does not support custom thumbnail uploads via this API version, so we ignore thumbnailPath.
-            var uploader = _tikTokServiceFactory.Create(_accessToken);
-            return uploader.UploadVideoAsync(videoPath, videoDetails.Title, cancellationToken);
+            throw new NotImplementedException("TikTok uploading is not yet supported in this version.");
         }
     }
 }
