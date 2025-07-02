@@ -86,10 +86,9 @@
                             </Grid>
                         </GroupBox>
 
-                        <GroupBox Header="Pexels Video Settings" Padding="10" Margin="0,0,0,10">
+                        <GroupBox Header="Pexels Settings" Padding="10" Margin="0,0,0,10">
                             <Grid>
                                 <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
                                 <Grid.ColumnDefinitions>
@@ -99,23 +98,6 @@
 
                                 <Label Grid.Row="0" Grid.Column="0" Content="Pexels API Key:"/>
                                 <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Pexels.ApiKey, UpdateSourceTrigger=PropertyChanged}"/>
-
-                                <Label Grid.Row="1" Grid.Column="0" Content="Default Video Query:"/>
-                                <ComboBox Grid.Row="1" Grid.Column="1" IsEditable="True"
-                                          Text="{Binding Pexels.DefaultQuery, UpdateSourceTrigger=PropertyChanged}">
-                                    <x:Array Type="sys:String">
-                                        <sys:String>nature</sys:String>
-                                        <sys:String>abstract</sys:String>
-                                        <sys:String>technology</sys:String>
-                                        <sys:String>cityscape</sys:String>
-                                        <sys:String>space</sys:String>
-                                        <sys:String>ocean</sys:String>
-                                        <sys:String>forest</sys:String>
-                                        <sys:String>mountains</sys:String>
-                                        <sys:String>coding</sys:String>
-                                        <sys:String>gaming</sys:String>
-                                    </x:Array>
-                                </ComboBox>
                             </Grid>
                         </GroupBox>
                     </StackPanel>
@@ -124,9 +106,9 @@
 
             <TabItem Header="Audio and Visuals">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
-                    <StackPanel>
+                    <StackPanel DataContext="{Binding Settings}">
                         <GroupBox Header="Text-to-Speech (TTS) Settings" Padding="10" Margin="0,0,0,10">
-                            <Grid DataContext="{Binding Settings}">
+                            <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="180"/>
                                     <ColumnDefinition Width="*" />
@@ -170,7 +152,32 @@
                             </Grid>
                         </GroupBox>
 
-                        <GroupBox Header="Video Clips" Padding="10" Margin="0,0,0,10" DataContext="{Binding Settings}">
+                        <GroupBox Header="Background Video Settings" Padding="10" Margin="0,0,0,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="180"/>
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Label Grid.Row="0" Grid.Column="0" Content="Default Video Query:"/>
+                                <ComboBox Grid.Row="0" Grid.Column="1" IsEditable="True"
+                                          Text="{Binding Pexels.DefaultQuery, UpdateSourceTrigger=PropertyChanged}">
+                                    <x:Array Type="sys:String">
+                                        <sys:String>nature</sys:String>
+                                        <sys:String>abstract</sys:String>
+                                        <sys:String>technology</sys:String>
+                                        <sys:String>cityscape</sys:String>
+                                        <sys:String>space</sys:String>
+                                        <sys:String>ocean</sys:String>
+                                        <sys:String>forest</sys:String>
+                                        <sys:String>mountains</sys:String>
+                                        <sys:String>coding</sys:String>
+                                        <sys:String>gaming</sys:String>
+                                    </x:Array>
+                                </ComboBox>
+                            </Grid>
+                        </GroupBox>
+
+                        <GroupBox Header="Video Clips" Padding="10" Margin="0,0,0,10">
                             <StackPanel>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -220,7 +227,17 @@
                                 </Grid.RowDefinitions>
 
                                 <Label Grid.Row="0" Grid.Column="0" Content="Pexels Background Query:"/>
-                                <TextBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding ThumbnailPexelsQuery}"/>
+                                <ComboBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" IsEditable="True"
+                                          Text="{Binding ThumbnailPexelsQuery, UpdateSourceTrigger=PropertyChanged}">
+                                    <x:Array Type="sys:String">
+                                        <sys:String>abstract background</sys:String>
+                                        <sys:String>person thinking</sys:String>
+                                        <sys:String>woman working on laptop</sys:String>
+                                        <sys:String>man looking surprised</sys:String>
+                                        <sys:String>dark pattern</sys:String>
+                                        <sys:String>colorful gradient</sys:String>
+                                    </x:Array>
+                                </ComboBox>
 
                                 <Label Grid.Row="1" Grid.Column="0" Content="Font Size:"/>
                                 <Slider Grid.Row="1" Grid.Column="1" Minimum="50" Maximum="200" Value="{Binding ThumbnailFontSize}"/>
