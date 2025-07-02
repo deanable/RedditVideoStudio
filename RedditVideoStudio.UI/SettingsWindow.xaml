@@ -48,7 +48,7 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
                     <StackPanel DataContext="{Binding Settings}">
                         <GroupBox Header="Reddit Settings" Padding="10" Margin="0,0,0,10">
-                            <Grid>
+                            <Grid DataContext="{Binding Reddit}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="180" />
                                     <ColumnDefinition Width="*" />
@@ -62,7 +62,7 @@
 
                                 <Label Content="Subreddit:" Grid.Row="0" Grid.Column="0"/>
                                 <ComboBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" IsEditable="True"
-                                          Text="{Binding Reddit.Subreddit, UpdateSourceTrigger=PropertyChanged}">
+                                          Text="{Binding Subreddit, UpdateSourceTrigger=PropertyChanged}">
                                     <ComboBox.ItemsSource>
                                         <x:Array Type="sys:String">
                                             <sys:String>AskReddit</sys:String>
@@ -90,17 +90,17 @@
                                 </ComboBox>
 
                                 <Label Content="Post Limit:" Grid.Row="1" Grid.Column="0" ToolTip="The maximum number of posts to retrieve from the subreddit."/>
-                                <Slider Value="{Binding Reddit.PostLimit}" Minimum="1" Maximum="50" IsSnapToTickEnabled="True" TickFrequency="1" Grid.Row="1" Grid.Column="1"/>
-                                <TextBlock Text="{Binding Reddit.PostLimit}" Grid.Row="1" Grid.Column="2" MinWidth="25" />
+                                <Slider Value="{Binding PostLimit}" Minimum="1" Maximum="50" IsSnapToTickEnabled="True" TickFrequency="1" Grid.Row="1" Grid.Column="1"/>
+                                <TextBlock Text="{Binding PostLimit}" Grid.Row="1" Grid.Column="2" MinWidth="25" />
 
                                 <Label Content="Comment Limit:" Grid.Row="2" Grid.Column="0" ToolTip="The maximum number of top comments to retrieve for each post."/>
-                                <Slider Value="{Binding Reddit.CommentLimit}" Minimum="1" Maximum="25" IsSnapToTickEnabled="True" TickFrequency="1" Grid.Row="2" Grid.Column="1"/>
-                                <TextBlock Text="{Binding Reddit.CommentLimit}" Grid.Row="2" Grid.Column="2" MinWidth="25" />
+                                <Slider Value="{Binding CommentLimit}" Minimum="1" Maximum="25" IsSnapToTickEnabled="True" TickFrequency="1" Grid.Row="2" Grid.Column="1"/>
+                                <TextBlock Text="{Binding CommentLimit}" Grid.Row="2" Grid.Column="2" MinWidth="25" />
                             </Grid>
                         </GroupBox>
 
                         <GroupBox Header="Pexels Settings" Padding="10" Margin="0,0,0,10">
-                            <Grid>
+                            <Grid DataContext="{Binding Pexels}">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
@@ -110,7 +110,7 @@
                                 </Grid.ColumnDefinitions>
 
                                 <Label Grid.Row="0" Grid.Column="0" Content="Pexels API Key:"/>
-                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Pexels.ApiKey, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding ApiKey, UpdateSourceTrigger=PropertyChanged}"/>
                             </Grid>
                         </GroupBox>
                     </StackPanel>
@@ -121,7 +121,7 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
                     <StackPanel DataContext="{Binding Settings}">
                         <GroupBox Header="Text-to-Speech (TTS) Settings" Padding="10" Margin="0,0,0,10">
-                            <Grid>
+                            <Grid DataContext="{Binding Tts}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="180"/>
                                     <ColumnDefinition Width="*" />
@@ -132,15 +132,15 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
                                 <Label Content="TTS Provider:" Grid.Row="0" Grid.Column="0"/>
-                                <ComboBox x:Name="TtsProviderComboBox" Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" SelectedValue="{Binding Tts.Provider}" SelectedValuePath="Content">
+                                <ComboBox x:Name="TtsProviderComboBox" Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" SelectedValue="{Binding Provider}" SelectedValuePath="Content">
                                     <ComboBoxItem>Google</ComboBoxItem>
                                     <ComboBoxItem>Azure</ComboBoxItem>
                                     <ComboBoxItem>Windows</ComboBoxItem>
                                     <ComboBoxItem>ElevenLabs</ComboBoxItem>
                                 </ComboBox>
                                 <Label Content="Speaking Rate:" Grid.Row="1" Grid.Column="0"/>
-                                <Slider Value="{Binding Tts.SpeakingRate}" Minimum="0.5" Maximum="2.0" TickFrequency="0.05" Grid.Row="1" Grid.Column="1"/>
-                                <TextBlock Text="{Binding Tts.SpeakingRate, StringFormat='F2'}" Grid.Row="1" Grid.Column="2" MinWidth="30" />
+                                <Slider Value="{Binding SpeakingRate}" Minimum="0.5" Maximum="2.0" TickFrequency="0.05" Grid.Row="1" Grid.Column="1"/>
+                                <TextBlock Text="{Binding SpeakingRate, StringFormat='F2'}" Grid.Row="1" Grid.Column="2" MinWidth="30" />
                             </Grid>
                         </GroupBox>
 
@@ -155,25 +155,25 @@
                                     </Style.Triggers>
                                 </Style>
                             </GroupBox.Style>
-                            <Grid>
+                            <Grid DataContext="{Binding Tts}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="180" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <Label Content="Voice:" Grid.Column="0" ToolTip="Select the installed Windows voice to use."/>
-                                <ComboBox Grid.Column="1" ItemsSource="{Binding Voices}" SelectedValue="{Binding Settings.Tts.WindowsVoice}"/>
+                                <ComboBox Grid.Column="1" ItemsSource="{Binding DataContext.Voices, RelativeSource={RelativeSource AncestorType=Window}}" SelectedValue="{Binding WindowsVoice}"/>
                             </Grid>
                         </GroupBox>
 
                         <GroupBox Header="Background Video Settings" Padding="10" Margin="0,0,0,10">
-                            <Grid>
+                            <Grid DataContext="{Binding Pexels}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="180"/>
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <Label Grid.Row="0" Grid.Column="0" Content="Default Video Query:"/>
                                 <ComboBox Grid.Row="0" Grid.Column="1" IsEditable="True"
-                                          Text="{Binding Pexels.DefaultQuery, UpdateSourceTrigger=PropertyChanged}">
+                                          Text="{Binding DefaultQuery, UpdateSourceTrigger=PropertyChanged}">
                                     <x:Array Type="sys:String">
                                         <sys:String>nature</sys:String>
                                         <sys:String>abstract</sys:String>
@@ -190,7 +190,7 @@
                             </Grid>
                         </GroupBox>
 
-                        <GroupBox Header="Video Clips" Padding="10" Margin="0,0,0,10">
+                        <GroupBox Header="Video Clips" Padding="10" Margin="0,0,0,10" DataContext="{Binding ClipSettings}">
                             <StackPanel>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -199,8 +199,8 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock VerticalAlignment="Center"><Hyperlink Click="IntroHyperlink_Click">Intro Clip:</Hyperlink></TextBlock>
-                                    <TextBlock Grid.Column="1" Text="{Binding ClipSettings.IntroPath, Converter={StaticResource FullPathToFileNameConverter}}" VerticalAlignment="Center" Margin="10,0" ToolTip="{Binding ClipSettings.IntroPath}"/>
-                                    <Slider x:Name="IntroDurationSlider" Grid.Column="2" Value="{Binding ClipSettings.IntroDuration, Mode=TwoWay}" Minimum="0" Maximum="30" Width="150" ToolTip="Duration in seconds. Set to 0 to disable."/>
+                                    <TextBlock Grid.Column="1" Text="{Binding IntroPath, Converter={StaticResource FullPathToFileNameConverter}}" VerticalAlignment="Center" Margin="10,0" ToolTip="{Binding IntroPath}"/>
+                                    <Slider x:Name="IntroDurationSlider" Grid.Column="2" Value="{Binding IntroDuration, Mode=TwoWay}" Minimum="0" Maximum="30" Width="150" ToolTip="Duration in seconds. Set to 0 to disable."/>
                                 </Grid>
                                 <Grid Margin="0,10,0,0">
                                     <Grid.ColumnDefinitions>
@@ -209,8 +209,8 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock VerticalAlignment="Center"><Hyperlink Click="BreakHyperlink_Click">Break/Separator Clip:</Hyperlink></TextBlock>
-                                    <TextBlock Grid.Column="1" Text="{Binding ClipSettings.BreakClipPath, Converter={StaticResource FullPathToFileNameConverter}}" VerticalAlignment="Center" Margin="10,0" ToolTip="{Binding ClipSettings.BreakClipPath}"/>
-                                    <Slider x:Name="BreakDurationSlider" Grid.Column="2" Value="{Binding ClipSettings.BreakClipDuration, Mode=TwoWay}" Minimum="0" Maximum="10" Width="150" ToolTip="Duration in seconds. Set to 0 to disable."/>
+                                    <TextBlock Grid.Column="1" Text="{Binding BreakClipPath, Converter={StaticResource FullPathToFileNameConverter}}" VerticalAlignment="Center" Margin="10,0" ToolTip="{Binding BreakClipPath}"/>
+                                    <Slider x:Name="BreakDurationSlider" Grid.Column="2" Value="{Binding BreakClipDuration, Mode=TwoWay}" Minimum="0" Maximum="10" Width="150" ToolTip="Duration in seconds. Set to 0 to disable."/>
                                 </Grid>
                                 <Grid Margin="0,10,0,0">
                                     <Grid.ColumnDefinitions>
@@ -219,13 +219,13 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock VerticalAlignment="Center"><Hyperlink Click="OutroHyperlink_Click">Outro Clip:</Hyperlink></TextBlock>
-                                    <TextBlock Grid.Column="1" Text="{Binding ClipSettings.OutroPath, Converter={StaticResource FullPathToFileNameConverter}}" VerticalAlignment="Center" Margin="10,0" ToolTip="{Binding ClipSettings.OutroPath}"/>
-                                    <Slider x:Name="OutroDurationSlider" Grid.Column="2" Value="{Binding ClipSettings.OutroDuration, Mode=TwoWay}" Minimum="0" Maximum="30" Width="150" ToolTip="Duration in seconds. Set to 0 to disable."/>
+                                    <TextBlock Grid.Column="1" Text="{Binding OutroPath, Converter={StaticResource FullPathToFileNameConverter}}" VerticalAlignment="Center" Margin="10,0" ToolTip="{Binding OutroPath}"/>
+                                    <Slider x:Name="OutroDurationSlider" Grid.Column="2" Value="{Binding OutroDuration, Mode=TwoWay}" Minimum="0" Maximum="30" Width="150" ToolTip="Duration in seconds. Set to 0 to disable."/>
                                 </Grid>
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="Thumbnail Settings" Padding="10" Margin="0,0,0,10" DataContext="{Binding Settings.ImageGeneration}">
+                        <GroupBox Header="Thumbnail Settings" Padding="10" Margin="0,0,0,10" DataContext="{Binding ImageGeneration}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="180"/>
@@ -265,7 +265,7 @@
                             </Grid>
                         </GroupBox>
 
-                        <GroupBox Header="Overlay &amp; Text Style" Padding="10" Margin="0,0,0,10" DataContext="{Binding Settings.ImageGeneration}">
+                        <GroupBox Header="Overlay &amp; Text Style" Padding="10" Margin="0,0,0,10" DataContext="{Binding ImageGeneration}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="180"/>
@@ -336,7 +336,7 @@
                         </GroupBox>
 
                         <GroupBox Header="YouTube Upload Defaults" Padding="10" Margin="0,0,0,10">
-                            <Grid>
+                            <Grid DataContext="{Binding YouTube}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="180"/>
                                     <ColumnDefinition Width="*"/>
@@ -349,7 +349,7 @@
 
                                 <Label Grid.Row="0" Grid.Column="0" Content="Default Upload Privacy:"/>
                                 <ComboBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" 
-                                          SelectedValue="{Binding YouTube.PrivacyStatus}"
+                                          SelectedValue="{Binding PrivacyStatus}"
                                           SelectedValuePath="Content">
                                     <ComboBoxItem Content="private"/>
                                     <ComboBoxItem Content="unlisted"/>
@@ -359,10 +359,10 @@
                                 <Label Grid.Row="1" Grid.Column="0" Content="Auto-Schedule Interval:"
                                        ToolTip="The time in minutes between each scheduled upload when using the auto-schedule feature."/>
                                 <Slider Grid.Row="1" Grid.Column="1" 
-                                        Value="{Binding YouTube.AutoScheduleIntervalMinutes, Mode=TwoWay}" 
+                                        Value="{Binding AutoScheduleIntervalMinutes, Mode=TwoWay}" 
                                         Minimum="1" Maximum="1440" IsSnapToTickEnabled="True" TickFrequency="1"/>
                                 <TextBlock Grid.Row="1" Grid.Column="2" MinWidth="35"
-                                           Text="{Binding YouTube.AutoScheduleIntervalMinutes, StringFormat='{}{0} min'}"/>
+                                           Text="{Binding AutoScheduleIntervalMinutes, StringFormat='{}{0} min'}"/>
                             </Grid>
                         </GroupBox>
 
@@ -423,7 +423,7 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
                     <StackPanel DataContext="{Binding Settings}">
                         <GroupBox Header="TikTok API Settings" Padding="10" Margin="0,0,0,10">
-                            <Grid>
+                            <Grid DataContext="{Binding TikTok}">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
@@ -434,10 +434,10 @@
                                 </Grid.ColumnDefinitions>
 
                                 <Label Content="TikTok Client Key:" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center"/>
-                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding TikTok.ClientKey, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="5,2"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding ClientKey, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="5,2"/>
 
                                 <Label Content="TikTok Client Secret:" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center"/>
-                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding TikTok.ClientSecret, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="5,2"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding ClientSecret, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="5,2"/>
                             </Grid>
                         </GroupBox>
                     </StackPanel>
