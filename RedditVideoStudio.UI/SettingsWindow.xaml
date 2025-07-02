@@ -280,22 +280,26 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
                     <StackPanel DataContext="{Binding Settings}">
                         <GroupBox Header="YouTube API Settings" Padding="10" Margin="0,0,0,10">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" MinWidth="180"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" MinWidth="180"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
 
-                                <Label Grid.Row="0" Grid.Column="0" Content="YouTube Client ID:"/>
-                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding YouTube.ClientId, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <Label Grid.Row="0" Grid.Column="0" Content="YouTube Client ID:"/>
+                                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding YouTube.ClientId, UpdateSourceTrigger=PropertyChanged}"/>
 
-                                <Label Grid.Row="1" Grid.Column="0" Content="YouTube Client Secret:"/>
-                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding YouTube.ClientSecret, UpdateSourceTrigger=PropertyChanged}"/>
-                            </Grid>
+                                    <Label Grid.Row="1" Grid.Column="0" Content="YouTube Client Secret:"/>
+                                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding YouTube.ClientSecret, UpdateSourceTrigger=PropertyChanged}"/>
+                                </Grid>
+                                <Button Content="Load from client_secrets.json" HorizontalAlignment="Right" Margin="0,10,0,0" Padding="10,5"
+                                        Click="LoadYouTubeSecrets_Click" ToolTip="Load credentials directly from the JSON file downloaded from Google Cloud Console."/>
+                            </StackPanel>
                         </GroupBox>
 
                         <GroupBox Header="YouTube Upload Defaults" Padding="10" Margin="0,0,0,10">
