@@ -17,6 +17,9 @@ namespace RedditVideoStudio.Infrastructure.Services
     using System.Threading.Tasks;
     using RedditVideoStudio.Core.Exceptions;
 
+    /// <summary>
+    /// Represents the YouTube video destination, handling authentication and video uploads.
+    /// </summary>
     public class YouTubeDestination : IVideoDestination
     {
         private readonly ILogger<YouTubeDestination> _logger;
@@ -25,15 +28,39 @@ namespace RedditVideoStudio.Infrastructure.Services
         private const string CredentialDataStoreKey = "YouTube.Api.Auth.Store";
         private const string ClientSecretFileName = "client_secrets.json";
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="YouTubeDestination"/> class.
+        /// </summary>
+        /// <param name="logger">The logger instance for logging.</param>
         public YouTubeDestination(ILogger<YouTubeDestination> logger)
         {
             _logger = logger;
-            _fileDataStore = new FileDataStore(Path.Combine(AppContext.BaseDirectory, CredentialDataStoreKey), true);
+
+            var dataStorePath = Path.Combine(AppContext.BaseDirectory, CredentialDataStoreKey);
+
+            if (!Directory.Exists(dataStorePath))
+            {
+                _logger.LogInformation("Creating FileDataStore directory at: {Path}", dataStorePath);
+                Directory.CreateDirectory(dataStorePath);
+            }
+
+            _fileDataStore = new FileDataStore(dataStorePath, true);
         }
 
+        /// <summary>
+        /// Gets the name of the video destination.
+        /// </summary>
         public string Name => "YouTube";
+
+        /// <summary>
+        /// Gets a value indicating whether the user is currently authenticated.
+        /// </summary>
         public bool IsAuthenticated => _credential != null && !_credential.Token.IsExpired(_credential.Flow.Clock);
 
+        /// <summary>
+        /// Authenticates the user with YouTube using OAuth 2.0.
+        /// </summary>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
         public async Task AuthenticateAsync(CancellationToken cancellationToken = default)
         {
             var clientSecretFilePath = Path.Combine(AppContext.BaseDirectory, ClientSecretFileName);
@@ -73,13 +100,47 @@ namespace RedditVideoStudio.Infrastructure.Services
             }
         }
 
-        public async Task SignOutAsync()
+        /// <summary>
+        /// Signs the user out by revoking the stored credentials and deleting the token directory.
+        /// </summary>
+        public Task SignOutAsync()
         {
+            // --- START OF CORRECTION ---
             _credential = null;
-            await _fileDataStore.DeleteAsync<string>("user");
-            _logger.LogInformation("User has been signed out from YouTube, and stored credentials have been deleted.");
+            try
+            {
+                // Define the path to the directory where authentication tokens are stored.
+                var dataStorePath = Path.Combine(AppContext.BaseDirectory, CredentialDataStoreKey);
+
+                // Check if the directory exists before attempting to delete it.
+                if (Directory.Exists(dataStorePath))
+                {
+                    // Recursively delete the directory and all its contents.
+                    Directory.Delete(dataStorePath, true);
+                    _logger.LogInformation("Successfully deleted YouTube credential data store at: {Path}", dataStorePath);
+                }
+                else
+                {
+                    _logger.LogWarning("YouTube credential data store not found at {Path}, nothing to delete.", dataStorePath);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log any errors that occur during the deletion process.
+                _logger.LogError(ex, "Failed to delete the YouTube credential data store.");
+            }
+            // Return a completed task as this operation is synchronous.
+            return Task.CompletedTask;
+            // --- END OF CORRECTION ---
         }
 
+        /// <summary>
+        /// Uploads a video to YouTube, including its details and an optional thumbnail.
+        /// </summary>
+        /// <param name="videoPath">The local path of the video file to upload.</param>
+        /// <param name="videoDetails">The metadata for the video (title, description, etc.).</param>
+        /// <param name="thumbnailPath">The local path of the thumbnail image (optional).</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
         public async Task UploadVideoAsync(string videoPath, VideoDetails videoDetails, string? thumbnailPath, CancellationToken cancellationToken = default)
         {
             if (!IsAuthenticated || _credential == null)

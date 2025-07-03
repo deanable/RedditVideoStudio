@@ -150,24 +150,10 @@ namespace RedditVideoStudio.UI
             settingsWindow.ShowDialog();
         }
 
-        private void ResetYouTubeAuth_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                string tokenFolderPath = Path.Combine(AppContext.BaseDirectory, "YouTube.Auth.Store");
-                if (Directory.Exists(tokenFolderPath))
-                {
-                    Directory.Delete(tokenFolderPath, true);
-                }
-                _logger.LogInformation("YouTube authentication tokens have been deleted.");
-                MessageBox.Show("YouTube authentication has been reset. You will be prompted to log in on the next upload.", "Auth Reset", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to reset YouTube authentication.");
-                MessageBox.Show($"Could not reset authentication: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
+        // --- START OF CORRECTION ---
+        // The ResetYouTubeAuth_Click event handler has been removed as its
+        // functionality is now part of the YouTubeDestination.SignOutAsync method.
+        // --- END OF CORRECTION ---
 
         private void HandleException(Exception ex)
         {

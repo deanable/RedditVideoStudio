@@ -362,3 +362,21 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 /RedditVideoStudio.UI/ffmpeg
+
+# Secrets - Never commit these files
+client_secrets.json
+
+# Token Cache
+YouTube.Api.Auth.Store/
+
+# Build artifacts
+[Oo]bj/
+[Bb]in/
+
+# IDE files
+.vs/
+*.user
+*.suo
+
+# AI-generated combined codebase files
+Combined_Codebase_*.txt
