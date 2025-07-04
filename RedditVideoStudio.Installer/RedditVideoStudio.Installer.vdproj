@@ -21,7 +21,7 @@
         }
         "Entry"
         {
-        "MsmKey" = "8:_473D1F59B8F74117A97B7ACA9160FF07"
+        "MsmKey" = "8:_9C523862B92046D5B31961E207A85D53"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
         }
@@ -43,6 +43,22 @@
         "PrivateKeyFile" = "8:"
         "TimeStampServer" = "8:"
         "InstallerBootstrapper" = "3:2"
+            "BootstrapperCfg:{63ACBE69-63AA-4F98-B2B6-99F9E24495F2}"
+            {
+            "Enabled" = "11:TRUE"
+            "PromptEnabled" = "11:TRUE"
+            "PrerequisitesLocation" = "2:1"
+            "Url" = "8:"
+            "ComponentsUrl" = "8:"
+                "Items"
+                {
+                    "{EDC2488A-8267-493A-A98E-7D9C3B36CDF3}:.NETFramework,Version=v4.7.2"
+                    {
+                    "Name" = "8:Microsoft .NET Framework 4.7.2 (x86 and x64)"
+                    "ProductCode" = "8:.NETFramework,Version=v4.7.2"
+                    }
+                }
+            }
         }
         "Release"
         {
@@ -59,6 +75,14 @@
         "PrivateKeyFile" = "8:"
         "TimeStampServer" = "8:"
         "InstallerBootstrapper" = "3:2"
+            "BootstrapperCfg:{63ACBE69-63AA-4F98-B2B6-99F9E24495F2}"
+            {
+            "Enabled" = "11:TRUE"
+            "PromptEnabled" = "11:TRUE"
+            "PrerequisitesLocation" = "2:1"
+            "Url" = "8:"
+            "ComponentsUrl" = "8:"
+            }
         }
     }
     "Deployable"
@@ -136,6 +160,17 @@
             "Property" = "8:ProgramMenuFolder"
                 "Folders"
                 {
+                    "{9EF0B969-E518-4E46-987F-47570745A589}:_1E6DB39E0A67481282F17408215A4C26"
+                    {
+                    "Name" = "8:Reddit Video Studio"
+                    "AlwaysCreate" = "11:FALSE"
+                    "Condition" = "8:"
+                    "Transitive" = "11:FALSE"
+                    "Property" = "8:_DC53FA64415847679B273B3E388A6BB7"
+                        "Folders"
+                        {
+                        }
+                    }
                 }
             }
             "{3C67513D-01DD-4637-8A68-80971EB9504F}:_6E89C2D12B744891BCB48C9EEB8B65C0"
@@ -167,7 +202,7 @@
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:RedditVideoStudio.Installer"
         "ProductCode" = "8:{16346434-0511-46B6-AD17-3CEF0DFDDCFB}"
-        "PackageCode" = "8:{8C51A120-118F-4239-996A-774373E1AA0F}"
+        "PackageCode" = "8:{16216025-7886-4780-AE83-BAE660D58C37}"
         "UpgradeCode" = "8:{727218DE-2206-43E1-B002-BF4B70F0004A}"
         "AspNetVersion" = "8:2.0.50727.0"
         "RestartWWWService" = "11:FALSE"
@@ -177,13 +212,13 @@
         "ProductVersion" = "8:1.0.0"
         "Manufacturer" = "8:Dean Kruger"
         "ARPHELPTELEPHONE" = "8:"
-        "ARPHELPLINK" = "8:"
+        "ARPHELPLINK" = "8:https://github.com/deanable/RedditVideoStudio"
         "Title" = "8:RedditVideoStudio.Installer"
         "Subject" = "8:"
         "ARPCONTACT" = "8:Dean Kruger"
         "Keywords" = "8:"
         "ARPCOMMENTS" = "8:"
-        "ARPURLINFOABOUT" = "8:"
+        "ARPURLINFOABOUT" = "8:https://github.com/deanable/RedditVideoStudio"
         "ARPPRODUCTICON" = "8:_3AC66FD87AF341A88C4AC6C3144E8B2E"
         "ARPIconIndex" = "3:0"
         "SearchPath" = "8:"
@@ -295,7 +330,7 @@
             "ShowCmd" = "3:1"
             "IconIndex" = "3:0"
             "Transitive" = "11:FALSE"
-            "Target" = "8:_473D1F59B8F74117A97B7ACA9160FF07"
+            "Target" = "8:_9C523862B92046D5B31961E207A85D53"
             "Folder" = "8:_1C4E1C5FEAE04A97A812A3EFA97AA7BB"
             "WorkingFolder" = "8:_6E89C2D12B744891BCB48C9EEB8B65C0"
             "Icon" = "8:_3AC66FD87AF341A88C4AC6C3144E8B2E"
@@ -309,8 +344,8 @@
             "ShowCmd" = "3:1"
             "IconIndex" = "3:0"
             "Transitive" = "11:FALSE"
-            "Target" = "8:_473D1F59B8F74117A97B7ACA9160FF07"
-            "Folder" = "8:_68C00D5E28B14C09BC3F0C0B3C6C5F91"
+            "Target" = "8:_9C523862B92046D5B31961E207A85D53"
+            "Folder" = "8:_1E6DB39E0A67481282F17408215A4C26"
             "WorkingFolder" = "8:_6E89C2D12B744891BCB48C9EEB8B65C0"
             "Icon" = "8:_3AC66FD87AF341A88C4AC6C3144E8B2E"
             "Feature" = "8:"
@@ -714,9 +749,9 @@
         }
         "ProjectOutput"
         {
-            "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_473D1F59B8F74117A97B7ACA9160FF07"
+            "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_9C523862B92046D5B31961E207A85D53"
             {
-            "SourcePath" = "8:..\\RedditVideoStudio.UI\\obj\\Debug\\net9.0-windows\\RedditVideoStudio.UI.dll"
+            "SourcePath" = "8:..\\RedditVideoStudio.Application\\obj\\Debug\\net9.0\\RedditVideoStudio.Application.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_6E89C2D12B744891BCB48C9EEB8B65C0"
@@ -734,9 +769,9 @@
             "IsDependency" = "11:FALSE"
             "IsolateTo" = "8:"
             "ProjectOutputGroupRegister" = "3:1"
-            "OutputConfiguration" = "8:"
+            "OutputConfiguration" = "8:Debug|Any CPU"
             "OutputGroupCanonicalName" = "8:Built"
-            "OutputProjectGuid" = "8:{6EACEA04-B562-4676-A79C-A0B7D558E407}"
+            "OutputProjectGuid" = "8:{6E5E0363-5D11-43BF-A6B6-3958F0BED8BD}"
             "ShowKeyOutput" = "11:TRUE"
                 "ExcludeFilters"
                 {
