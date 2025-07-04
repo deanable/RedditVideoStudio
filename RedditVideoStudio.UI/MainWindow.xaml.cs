@@ -1,9 +1,12 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿// C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\MainWindow.xaml.cs
+
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RedditVideoStudio.Core.Exceptions;
 using RedditVideoStudio.Core.Interfaces;
 using RedditVideoStudio.Domain.Models;
 using RedditVideoStudio.Shared.Models;
+using RedditVideoStudio.Shared.Utilities; // Added for TextUtils
 using RedditVideoStudio.UI.Logging;
 using RedditVideoStudio.UI.ViewModels;
 using System;
@@ -25,7 +28,6 @@ namespace RedditVideoStudio.UI
         private readonly IRedditService _redditService;
         private readonly IAppConfiguration _configService;
         private readonly IPublishingService _publishingService;
-
         private readonly ObservableCollection<RedditPostViewModel> _fetchedPosts = new();
         private CancellationTokenSource _cancellationTokenSource = new();
 
@@ -37,7 +39,6 @@ namespace RedditVideoStudio.UI
              IPublishingService publishingService)
         {
             InitializeComponent();
-
             _logger = logger;
             _serviceProvider = serviceProvider;
             _redditService = redditService;
@@ -49,15 +50,18 @@ namespace RedditVideoStudio.UI
             DelegatingSink.SetSink(textBoxSink);
 
             _logger.LogInformation("Application Main Window Initialized.");
+            // Fire and forget the loading process
             _ = LoadTopPostsAsync();
         }
 
         private async void GenerateVideo_Click(object sender, RoutedEventArgs e)
         {
-            var selectedPosts = RedditPostListBox.SelectedItems.Cast<RedditPostViewModel>().ToList();
+            var selectedPosts = RedditPostListBox.SelectedItems.Cast<RedditPostViewModel>()
+                                               .Where(p => !p.IsAlreadyUploaded) // Ensure we only process non-uploaded posts
+                                               .ToList();
             if (!selectedPosts.Any())
             {
-                MessageBox.Show("Please select at least one Reddit post to generate a video.", "No Selection", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Please select at least one Reddit post that has not already been uploaded.", "No Selection", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -74,7 +78,6 @@ namespace RedditVideoStudio.UI
 
             GenerationProgressBar.Value = 0;
             _cancellationTokenSource = new CancellationTokenSource();
-
             IProgress<ProgressReport> progress = new Progress<ProgressReport>(report =>
             {
                 GenerationProgressBar.Value = report.Percentage;
@@ -86,14 +89,14 @@ namespace RedditVideoStudio.UI
                 foreach (var post in selectedPosts)
                 {
                     _cancellationTokenSource.Token.ThrowIfCancellationRequested();
-
                     var postData = new RedditPostData
                     {
                         Title = post.Title ?? string.Empty,
                         Comments = post.Comments
                     };
-
                     await _publishingService.PublishVideoAsync(postData, enabledDestinationNames, progress, _cancellationTokenSource.Token);
+                    // Mark as uploaded after successful processing
+                    post.IsAlreadyUploaded = true;
                 }
                 MessageBox.Show("All publishing tasks completed!", "Done", MessageBoxButton.OK, MessageBoxImage.Information);
             }
@@ -113,11 +116,26 @@ namespace RedditVideoStudio.UI
             {
                 _logger.LogInformation("Fetching top Reddit posts...");
                 var posts = await _redditService.FetchFullPostDataAsync(CancellationToken.None);
+
+                // Get the YouTube destination service to check for existing videos
+                var youTubeDestination = _serviceProvider.GetRequiredService<IEnumerable<IVideoDestination>>().FirstOrDefault(d => d.Name == "YouTube");
+                HashSet<string> uploadedTitles = new();
+
+                if (youTubeDestination != null && youTubeDestination.IsAuthenticated)
+                {
+                    uploadedTitles = await youTubeDestination.GetUploadedVideoTitlesAsync(CancellationToken.None);
+                }
+                else
+                {
+                    _logger.LogWarning("YouTube is not authenticated. Cannot check for existing videos.");
+                }
+
                 await Dispatcher.InvokeAsync(() =>
                 {
                     _fetchedPosts.Clear();
                     foreach (var post in posts)
                     {
+                        var sanitizedTitle = TextUtils.SanitizeYouTubeTitle(post.Title);
                         _fetchedPosts.Add(new RedditPostViewModel
                         {
                             Id = post.Id,
@@ -126,11 +144,14 @@ namespace RedditVideoStudio.UI
                             Subreddit = post.Subreddit,
                             Url = post.Url,
                             Permalink = post.Permalink,
-                            Comments = post.Comments.ToList()
+                            Comments = post.Comments.ToList(),
+                            // Set the property based on whether the title exists in the fetched list
+                            IsAlreadyUploaded = uploadedTitles.Contains(sanitizedTitle)
                         });
                     }
                 });
-                _logger.LogInformation("Loaded {Count} posts.", _fetchedPosts.Count);
+
+                _logger.LogInformation("Loaded {Count} posts. Marked {UploadedCount} as already uploaded to YouTube.", _fetchedPosts.Count, _fetchedPosts.Count(p => p.IsAlreadyUploaded));
             }
             catch (Exception ex)
             {
@@ -148,12 +169,9 @@ namespace RedditVideoStudio.UI
             var settingsWindow = _serviceProvider.GetRequiredService<SettingsWindow>();
             settingsWindow.Owner = this;
             settingsWindow.ShowDialog();
+            // After settings close, reload posts to reflect any new authentications
+            _ = LoadTopPostsAsync();
         }
-
-        // --- START OF CORRECTION ---
-        // The ResetYouTubeAuth_Click event handler has been removed as its
-        // functionality is now part of the YouTubeDestination.SignOutAsync method.
-        // --- END OF CORRECTION ---
 
         private void HandleException(Exception ex)
         {

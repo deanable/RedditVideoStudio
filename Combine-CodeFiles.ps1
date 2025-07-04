@@ -6,7 +6,7 @@ $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $outputFile = Join-Path -Path $workingDir -ChildPath "Combined_Codebase_$timestamp.txt"
 
 # Define the file extensions to include in the bundle.
-$extensions = @("*.cs", "*.xaml", "*.json", "*.csproj", "*.sln") # Common C# project files
+$extensions = @("*.cs", "*.xaml", "*.csproj", "*.sln", "*.vdproj") # Common C# project files
 
 # Define directories to exclude from the search. This is the most important change.
 $excludeDirs = @("bin", "obj", ".vs")

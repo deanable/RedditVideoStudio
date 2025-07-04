@@ -29,6 +29,18 @@
             return Task.CompletedTask;
         }
 
+        public Task<bool> DoesVideoExistAsync(string title, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
+
+        // In InstagramDestination.cs
+        public Task<HashSet<string>> GetUploadedVideoTitlesAsync(CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation("Skipping title fetch for Instagram (placeholder).");
+            return Task.FromResult(new HashSet<string>());
+        }
+
         public Task SignOutAsync()
         {
             _logger.LogInformation("Signing out from Instagram (simulated).");

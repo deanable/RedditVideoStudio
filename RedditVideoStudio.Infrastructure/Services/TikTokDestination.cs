@@ -48,5 +48,17 @@ namespace RedditVideoStudio.Infrastructure.Services
         {
             throw new NotImplementedException("TikTok uploading is not yet supported in this version.");
         }
+
+        // In TikTokVideoDestination.cs (inside TikTokDestination.cs)
+        public Task<HashSet<string>> GetUploadedVideoTitlesAsync(CancellationToken cancellationToken = default)
+        {
+            // This is a placeholder; real implementation would require TikTok API calls.
+            return Task.FromResult(new HashSet<string>());
+        }
+
+        public Task<bool> DoesVideoExistAsync(string title, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
     }
 }
