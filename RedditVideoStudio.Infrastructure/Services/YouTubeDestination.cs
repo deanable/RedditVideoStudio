@@ -20,54 +20,36 @@ namespace RedditVideoStudio.Infrastructure.Services
     using System.Collections.Generic;
     using RedditVideoStudio.Shared.Utilities;
 
-    /// <summary>
-    /// Represents the YouTube video destination, handling authentication, uploading,
-    /// and checking for existing videos on the user's channel.
-    /// </summary>
     public class YouTubeDestination : IVideoDestination
     {
         private readonly ILogger<YouTubeDestination> _logger;
+        // --- FIX: Injected IAppConfiguration to access settings ---
+        private readonly IAppConfiguration _configService;
         private UserCredential? _credential;
         private readonly FileDataStore _fileDataStore;
         private const string CredentialDataStoreKey = "YouTube.Api.Auth.Store";
         private const string ClientSecretFileName = "client_secrets.json";
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="YouTubeDestination"/> class.
-        /// </summary>
-        /// <param name="logger">The logger instance for logging information and errors.</param>
-        public YouTubeDestination(ILogger<YouTubeDestination> logger)
+        public YouTubeDestination(ILogger<YouTubeDestination> logger, IAppConfiguration configService)
         {
             _logger = logger;
-
-            // Define the path for storing OAuth 2.0 credentials.
+            // --- FIX: Store the injected configuration service ---
+            _configService = configService;
             var dataStorePath = Path.Combine(AppContext.BaseDirectory, CredentialDataStoreKey);
 
-            // Ensure the directory for the FileDataStore exists before creating an instance of it.
             if (!Directory.Exists(dataStorePath))
             {
                 _logger.LogInformation("Creating FileDataStore directory at: {Path}", dataStorePath);
                 Directory.CreateDirectory(dataStorePath);
             }
 
-            // Initialize the FileDataStore, which will manage the storage and retrieval of user credentials.
             _fileDataStore = new FileDataStore(dataStorePath, true);
         }
 
-        /// <summary>
-        /// Gets the name of the destination.
-        /// </summary>
         public string Name => "YouTube";
 
-        /// <summary>
-        /// Gets a value indicating whether the user is currently authenticated and the token is not expired.
-        /// </summary>
-        public bool IsAuthenticated => _credential != null && !_credential.Token.IsExpired(_credential.Flow.Clock);
+        public bool IsAuthenticated => _credential != null && !_credential.Token.IsStale;
 
-        /// <summary>
-        /// Initiates the OAuth 2.0 authentication process with Google for YouTube.
-        /// </summary>
-        /// <param name="cancellationToken">A token to cancel the operation.</param>
         public async Task AuthenticateAsync(CancellationToken cancellationToken = default)
         {
             var clientSecretFilePath = Path.Combine(AppContext.BaseDirectory, ClientSecretFileName);
@@ -82,10 +64,6 @@ namespace RedditVideoStudio.Infrastructure.Services
             {
                 await using var stream = new FileStream(clientSecretFilePath, FileMode.Open, FileAccess.Read);
                 var clientSecrets = await GoogleClientSecrets.FromStreamAsync(stream, cancellationToken);
-
-                // --- FIX: Added 'YoutubeReadonly' scope ---
-                // To list and search for videos (to check for duplicates), we need read-only access
-                // in addition to the upload permission.
                 var scopes = new[] {
                     YouTubeService.Scope.YoutubeUpload,
                     YouTubeService.Scope.YoutubeReadonly
@@ -93,7 +71,7 @@ namespace RedditVideoStudio.Infrastructure.Services
 
                 _credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
                     clientSecrets.Secrets,
-                    scopes, // Use the updated scopes array
+                    scopes,
                     "user",
                     cancellationToken,
                     _fileDataStore);
@@ -104,7 +82,7 @@ namespace RedditVideoStudio.Infrastructure.Services
                 }
                 else
                 {
-                    throw new YouTubeApiException("Authentication was not successful. The user may have cancelled the operation or there was an issue with the credentials.");
+                    throw new YouTubeApiException("Authentication was not successful. The user may have cancelled the operation.");
                 }
             }
             catch (Exception ex)
@@ -114,18 +92,11 @@ namespace RedditVideoStudio.Infrastructure.Services
             }
         }
 
-        /// <summary>
-        /// Signs the user out by clearing their stored credentials.
-        /// </summary>
         public async Task SignOutAsync()
         {
             _credential = null;
             try
             {
-                // --- FIX: Use FileDataStore.ClearAsync() instead of Directory.Delete() ---
-                // This is the correct way to clear the credentials. It removes the token file(s)
-                // from within the data store directory but leaves the directory itself intact,
-                // preventing the DirectoryNotFoundException on subsequent logins.
                 await _fileDataStore.ClearAsync();
                 _logger.LogInformation("Successfully cleared YouTube credential data store.");
             }
@@ -135,13 +106,6 @@ namespace RedditVideoStudio.Infrastructure.Services
             }
         }
 
-        /// <summary>
-        /// Uploads a video file and its metadata to the authenticated user's YouTube channel.
-        /// </summary>
-        /// <param name="videoPath">The path to the video file.</param>
-        /// <param name="videoDetails">Metadata for the video (title, description, etc.).</param>
-        /// <param name="thumbnailPath">The path to the thumbnail image.</param>
-        /// <param name="cancellationToken">A token to cancel the operation.</param>
         public async Task UploadVideoAsync(string videoPath, VideoDetails videoDetails, string? thumbnailPath, CancellationToken cancellationToken = default)
         {
             if (!IsAuthenticated || _credential == null)
@@ -162,13 +126,21 @@ namespace RedditVideoStudio.Infrastructure.Services
                     Title = videoDetails.Title,
                     Description = videoDetails.Description,
                     Tags = videoDetails.Tags,
-                    CategoryId = "22", // Category for "People & Blogs"
+                    CategoryId = "22", // "People & Blogs"
                 },
                 Status = new VideoStatus
                 {
-                    PrivacyStatus = "private" // Default to private
+                    // --- FIX: Use the PrivacyStatus from settings instead of hardcoding "private" ---
+                    PrivacyStatus = _configService.Settings.YouTube.PrivacyStatus
                 }
             };
+
+            // This logic was missing from your latest file but is required for scheduling private videos
+            if (video.Status.PrivacyStatus.Equals("private", StringComparison.OrdinalIgnoreCase) && videoDetails.ScheduledPublishTime.HasValue)
+            {
+                video.Status.PublishAtDateTimeOffset = videoDetails.ScheduledPublishTime.Value;
+            }
+
 
             string videoId;
             await using (var fileStream = new FileStream(videoPath, FileMode.Open))
@@ -193,7 +165,6 @@ namespace RedditVideoStudio.Infrastructure.Services
                 await using var thumbStream = new FileStream(thumbnailPath, FileMode.Open);
                 var thumbRequest = youtubeService.Thumbnails.Set(videoId, thumbStream, "image/jpeg");
                 var thumbUploadStatus = await thumbRequest.UploadAsync(cancellationToken);
-
                 if (thumbUploadStatus.Status != UploadStatus.Completed)
                 {
                     _logger.LogError(thumbUploadStatus.Exception, "YouTube thumbnail upload failed.");
@@ -205,12 +176,6 @@ namespace RedditVideoStudio.Infrastructure.Services
             }
         }
 
-        /// <summary>
-        /// Checks if a video with the specified title already exists on the channel.
-        /// </summary>
-        /// <param name="title">The title of the video to check.</param>
-        /// <param name="cancellationToken">A token to cancel the operation.</param>
-        /// <returns>True if a video with the exact title exists; otherwise, false.</returns>
         public async Task<bool> DoesVideoExistAsync(string title, CancellationToken cancellationToken = default)
         {
             if (!IsAuthenticated || _credential == null)
@@ -224,13 +189,11 @@ namespace RedditVideoStudio.Infrastructure.Services
                 HttpClientInitializer = _credential,
                 ApplicationName = "RedditVideoStudio"
             });
-
             var searchRequest = youtubeService.Search.List("snippet");
             searchRequest.ForMine = true;
             searchRequest.Type = "video";
             searchRequest.Q = $"\"{title}\""; // Exact title search
             searchRequest.MaxResults = 1;
-
             try
             {
                 var searchResponse = await searchRequest.ExecuteAsync(cancellationToken);
@@ -244,15 +207,10 @@ namespace RedditVideoStudio.Infrastructure.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to search for existing videos on YouTube.");
-                return false; // Fail safely
+                return false;
             }
         }
 
-        /// <summary>
-        /// Fetches all video titles from the authenticated user's YouTube channel.
-        /// </summary>
-        /// <param name="cancellationToken">A token to cancel the operation.</param>
-        /// <returns>A HashSet containing all unique, sanitized video titles.</returns>
         public async Task<HashSet<string>> GetUploadedVideoTitlesAsync(CancellationToken cancellationToken = default)
         {
             var videoTitles = new HashSet<string>();
@@ -267,7 +225,6 @@ namespace RedditVideoStudio.Infrastructure.Services
                 HttpClientInitializer = _credential,
                 ApplicationName = "RedditVideoStudio"
             });
-
             string? nextPageToken = "";
             _logger.LogInformation("Fetching all uploaded video titles from YouTube...");
             while (nextPageToken != null)
@@ -277,9 +234,7 @@ namespace RedditVideoStudio.Infrastructure.Services
                 searchRequest.Type = "video";
                 searchRequest.MaxResults = 50; // Max allowed value
                 searchRequest.PageToken = nextPageToken;
-
                 var searchResponse = await searchRequest.ExecuteAsync(cancellationToken);
-
                 foreach (var searchResult in searchResponse.Items)
                 {
                     var sanitizedTitle = TextUtils.SanitizeYouTubeTitle(searchResult.Snippet.Title);

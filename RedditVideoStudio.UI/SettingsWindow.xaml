@@ -382,39 +382,8 @@
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
-                                <Label Grid.Row="0" Grid.Column="0" Content="FFmpeg Directory:"
-                                       ToolTip="The directory containing ffmpeg.exe and ffprobe.exe, relative to the application's main folder."/>
-                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding DataContext.Settings.Ffmpeg.FfmpegDirectory, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged}"/>
-
-                                <Label Grid.Row="1" Grid.Column="0" Content="Video Codec:"/>
-                                <ComboBox Grid.Row="1" Grid.Column="1" IsEditable="True"
-                                          Text="{Binding DataContext.Settings.Ffmpeg.VideoCodec, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged}">
-                                    <sys:String>libx264</sys:String>
-                                    <sys:String>libx265</sys:String>
-                                    <sys:String>h264_nvenc</sys:String>
-                                    <sys:String>hevc_nvenc</sys:String>
-                                </ComboBox>
-
-                                <Label Grid.Row="2" Grid.Column="0" Content="Encoding Preset:"/>
-                                <ComboBox Grid.Row="2" Grid.Column="1"
-                                          SelectedValue="{Binding DataContext.Settings.Ffmpeg.Preset, RelativeSource={RelativeSource AncestorType=Window}}"
-                                          SelectedValuePath="Content">
-                                    <ComboBoxItem Content="ultrafast"/>
-                                    <ComboBoxItem Content="superfast"/>
-                                    <ComboBoxItem Content="veryfast"/>
-                                    <ComboBoxItem Content="faster"/>
-                                    <ComboBoxItem Content="fast"/>
-                                    <ComboBoxItem Content="medium"/>
-                                    <ComboBoxItem Content="slow"/>
-                                    <ComboBoxItem Content="slower"/>
-                                    <ComboBoxItem Content="veryslow"/>
-                                </ComboBox>
-
-                                <Label Grid.Row="3" Grid.Column="0" Content="Video Bitrate:"/>
-                                <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding DataContext.Settings.Ffmpeg.VideoBitrate, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged}"/>
-
                                 <Label Grid.Row="4" Grid.Column="0" Content="Audio Bitrate:"/>
-                                <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding DataContext.Ffmpeg.AudioBitrate, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding DataContext.Settings.Ffmpeg.AudioBitrate, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged}"/>
                             </Grid>
                         </GroupBox>
                     </StackPanel>
