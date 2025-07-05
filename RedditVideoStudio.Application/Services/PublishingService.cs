@@ -75,15 +75,24 @@ namespace RedditVideoStudio.Application.Services
                     }
 
                     _logger.LogInformation("Uploading video to {Destination}...", destination.Name);
-                    var videoDescription = $"{post.Title}\n\n{string.Join("\n\n", post.Comments.Take(3))}";
 
-                    // --- FIX: Pass the ScheduledPublishTime from the post data to the VideoDetails object ---
+                    // --- SEO FIX 1: Add a standardized header to the description ---
+                    var descriptionHeader = $"From r/{post.Subreddit} on Reddit. Original post: https://reddit.com{post.Permalink}\n\n---\n\n";
+                    var videoDescription = $"{descriptionHeader}{post.Title}\n\n{string.Join("\n\n", post.Comments.Take(3))}";
+
+                    // --- SEO FIX 2: Prepend the subreddit to the title ---
+                    var videoTitle = $"(r/{post.Subreddit}) - {post.Title ?? "Reddit Story"}";
+
+                    // --- SEO FIX 3: Add default tags for the subreddit ---
+                    var videoTags = new[] { "reddit", post.Subreddit };
+
                     await destination.UploadVideoAsync(
                         finalVideoPath,
                         new VideoDetails
                         {
-                            Title = post.Title ?? "Reddit Story",
+                            Title = videoTitle,
                             Description = videoDescription,
+                            Tags = videoTags,
                             ScheduledPublishTime = post.ScheduledPublishTimeUtc
                         },
                         thumbnailPath,
