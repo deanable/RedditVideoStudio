@@ -42,7 +42,8 @@ namespace RedditVideoStudio.Application.Services
             _tempDirectoryFactory = tempDirectoryFactory;
         }
 
-        public async Task ComposeVideoAsync(string title, List<string> comments, IProgress<ProgressReport> progress, CancellationToken cancellationToken, string outputPath, string orientation)
+        // --- MODIFIED: Method signature updated to accept selfText ---
+        public async Task ComposeVideoAsync(string title, string selfText, List<string> comments, IProgress<ProgressReport> progress, CancellationToken cancellationToken, string outputPath, string orientation)
         {
             var originalOrientation = _appConfig.Settings.Ffmpeg.VideoOrientation;
             try
@@ -53,8 +54,6 @@ namespace RedditVideoStudio.Application.Services
 
                 var clipSettings = _appConfig.Settings.ClipSettings;
                 var videoSegments = new List<string>();
-
-                // CORRECTED: Use the user-defined query from settings
                 var backgroundQuery = _appConfig.Settings.Pexels.DefaultQuery;
                 _logger.LogInformation("Using background video query: '{Query}'", backgroundQuery);
 
@@ -62,14 +61,23 @@ namespace RedditVideoStudio.Application.Services
                 {
                     if (!string.IsNullOrEmpty(clipSettings.IntroPath) && File.Exists(clipSettings.IntroPath) && clipSettings.IntroDuration > 0)
                     {
-                        var introPath = await ProcessStaticClip(clipSettings.IntroPath, clipSettings.IntroDuration, "intro", tempDirectory.Path, cancellationToken);
+                        var introPath =
+                            await ProcessStaticClip(clipSettings.IntroPath, clipSettings.IntroDuration, "intro", tempDirectory.Path, cancellationToken);
                         videoSegments.Add(introPath);
                     }
 
                     var titleStoryboard = await _storyboardGenerator.GenerateAsync(new[] { title }, tempDirectory.Path, "Title", progress, cancellationToken);
-                    // CORRECTED: Pass the background query from settings instead of a hardcoded value
                     var titleSegmentPath = await _videoSegmentGenerator.GenerateAsync(titleStoryboard, backgroundQuery, tempDirectory.Path, "Title", Path.Combine(tempDirectory.Path, "title_clip.mp4"), progress, cancellationToken);
                     videoSegments.Add(titleSegmentPath);
+
+                    // --- ADDED: Generate a segment for the post body if it exists ---
+                    if (!string.IsNullOrWhiteSpace(selfText))
+                    {
+                        _logger.LogInformation("Post body (selfText) found. Generating content segment.");
+                        var selfTextStoryboard = await _storyboardGenerator.GenerateAsync(new[] { selfText }, tempDirectory.Path, "SelfText", progress, cancellationToken);
+                        var selfTextSegmentPath = await _videoSegmentGenerator.GenerateAsync(selfTextStoryboard, backgroundQuery, tempDirectory.Path, "SelfText", Path.Combine(tempDirectory.Path, "selftext_clip.mp4"), progress, cancellationToken);
+                        videoSegments.Add(selfTextSegmentPath);
+                    }
 
                     string? breakClipPath = null;
                     if (!string.IsNullOrEmpty(clipSettings.BreakClipPath) && File.Exists(clipSettings.BreakClipPath) && clipSettings.BreakClipDuration > 0)
@@ -89,7 +97,6 @@ namespace RedditVideoStudio.Application.Services
                             var comment = comments[i];
                             var commentSegmentName = $"Comment_{i + 1}";
                             var commentStoryboard = await _storyboardGenerator.GenerateAsync(new[] { comment }, tempDirectory.Path, commentSegmentName, progress, cancellationToken);
-                            // CORRECTED: Pass the background query from settings instead of a hardcoded value
                             var commentSegmentPath = await _videoSegmentGenerator.GenerateAsync(commentStoryboard, backgroundQuery, tempDirectory.Path, commentSegmentName, Path.Combine(tempDirectory.Path, $"{commentSegmentName}_clip.mp4"), progress, cancellationToken);
                             videoSegments.Add(commentSegmentPath);
                         }
@@ -97,7 +104,8 @@ namespace RedditVideoStudio.Application.Services
 
                     if (!string.IsNullOrEmpty(clipSettings.OutroPath) && File.Exists(clipSettings.OutroPath) && clipSettings.OutroDuration > 0)
                     {
-                        var outroPath = await ProcessStaticClip(clipSettings.OutroPath, clipSettings.OutroDuration, "outro", tempDirectory.Path, cancellationToken);
+                        var outroPath = await ProcessStaticClip(clipSettings.OutroPath, clipSettings.OutroDuration, "outro", tempDirectory.Path,
+                            cancellationToken);
                         videoSegments.Add(outroPath);
                     }
 
@@ -118,7 +126,6 @@ namespace RedditVideoStudio.Application.Services
         private async Task<string> ProcessStaticClip(string clipPath, double duration, string clipName, string tempPath, CancellationToken cancellationToken)
         {
             var tempClipPath = clipPath;
-
             if (duration > 0)
             {
                 var trimmedPath = Path.Combine(tempPath, $"{clipName}_trimmed.mp4");

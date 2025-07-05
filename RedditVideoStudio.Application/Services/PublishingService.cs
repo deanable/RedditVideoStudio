@@ -53,7 +53,8 @@ namespace RedditVideoStudio.Application.Services
 
             using (var tempDirectory = _tempDirectoryFactory.Create())
             {
-                string? thumbnailPath = await GenerateThumbnailForPost(post, tempDirectory.Path, cancellationToken);
+                string?
+                    thumbnailPath = await GenerateThumbnailForPost(post, tempDirectory.Path, cancellationToken);
 
                 foreach (var destination in targetDestinations)
                 {
@@ -62,11 +63,11 @@ namespace RedditVideoStudio.Application.Services
 
                     var orientation = GetOrientationForDestination(destination.Name);
                     _logger.LogInformation("Required orientation for {Destination}: {Orientation}", destination.Name, orientation);
-
                     string baseFilename = FileUtils.SanitizeFileName(post.Title ?? "video").Take(40).Aggregate("", (s, c) => s + c);
                     string finalVideoPath = Path.Combine(tempDirectory.Path, $"{baseFilename}_{destination.Name}_{Guid.NewGuid().ToString().Substring(0, 4)}.mp4");
 
-                    await _videoComposer.ComposeVideoAsync(post.Title ?? "", post.Comments, progress, cancellationToken, finalVideoPath, orientation);
+                    // --- MODIFIED: Pass the post's SelfText to the composer ---
+                    await _videoComposer.ComposeVideoAsync(post.Title ?? "", post.SelfText, post.Comments, progress, cancellationToken, finalVideoPath, orientation);
 
                     if (!destination.IsAuthenticated)
                     {
@@ -76,14 +77,11 @@ namespace RedditVideoStudio.Application.Services
 
                     _logger.LogInformation("Uploading video to {Destination}...", destination.Name);
 
-                    // --- SEO FIX 1: Add a standardized header to the description ---
                     var descriptionHeader = $"From r/{post.Subreddit} on Reddit. Original post: https://reddit.com{post.Permalink}\n\n---\n\n";
-                    var videoDescription = $"{descriptionHeader}{post.Title}\n\n{string.Join("\n\n", post.Comments.Take(3))}";
+                    // --- MODIFIED: Include the post SelfText in the video description ---
+                    var videoDescription = $"{descriptionHeader}{post.Title}\n\n{post.SelfText}\n\n{string.Join("\n\n", post.Comments.Take(3))}";
 
-                    // --- SEO FIX 2: Prepend the subreddit to the title ---
                     var videoTitle = $"(r/{post.Subreddit}) - {post.Title ?? "Reddit Story"}";
-
-                    // --- SEO FIX 3: Add default tags for the subreddit ---
                     var videoTags = new[] { "reddit", post.Subreddit };
 
                     await destination.UploadVideoAsync(

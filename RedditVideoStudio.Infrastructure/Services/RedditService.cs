@@ -78,6 +78,8 @@ namespace RedditVideoStudio.Infrastructure.Services
                     {
                         Id = postId,
                         Title = data.GetProperty("title").GetString() ?? "",
+                        // --- ADDED: Fetch the post's body (selftext) ---
+                        SelfText = data.GetProperty("selftext").GetString() ?? "",
                         Subreddit = data.GetProperty("subreddit").GetString() ?? "",
                         Url = data.GetProperty("url").GetString() ?? "",
                         Permalink = data.GetProperty("permalink").GetString() ?? "",

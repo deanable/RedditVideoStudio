@@ -9,6 +9,7 @@ namespace RedditVideoStudio.Core.Interfaces
     public interface IVideoComposer
     {
         Task ComposeVideoAsync(IProgress<ProgressReport> progress, CancellationToken cancellationToken);
-        Task ComposeVideoAsync(string title, List<string> comments, IProgress<ProgressReport> progress, CancellationToken cancellationToken, string outputPath, string orientation);
+        // --- MODIFIED: Added selfText parameter ---
+        Task ComposeVideoAsync(string title, string selfText, List<string> comments, IProgress<ProgressReport> progress, CancellationToken cancellationToken, string outputPath, string orientation);
     }
 }
