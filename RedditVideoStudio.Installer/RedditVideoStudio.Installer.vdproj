@@ -15,43 +15,13 @@
     {
         "Entry"
         {
-        "MsmKey" = "8:_183650357846472691671C246222ABAB"
-        "OwnerKey" = "8:_UNDEFINED"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
-        "MsmKey" = "8:_3901787F87064CA0B83A608887918286"
-        "OwnerKey" = "8:_UNDEFINED"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
         "MsmKey" = "8:_3AC66FD87AF341A88C4AC6C3144E8B2E"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
         {
-        "MsmKey" = "8:_4CD98E6FE0ED40D598A48951F439C308"
-        "OwnerKey" = "8:_UNDEFINED"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
-        "MsmKey" = "8:_A9722AFD0E4C4C419F019BC9BFED0853"
-        "OwnerKey" = "8:_UNDEFINED"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
-        "MsmKey" = "8:_C48A175F05E944C78F81A1D88BD4CC3B"
-        "OwnerKey" = "8:_UNDEFINED"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
-        "MsmKey" = "8:_C5D8DFB2CB394D268898258EEDDE18C5"
+        "MsmKey" = "8:_9B75184332374A5284FD6A4F706F1236"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
         }
@@ -240,7 +210,7 @@
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:RedditVideoStudio.Installer"
         "ProductCode" = "8:{16346434-0511-46B6-AD17-3CEF0DFDDCFB}"
-        "PackageCode" = "8:{5F4D8528-7E90-4061-8360-AD71684E6CC5}"
+        "PackageCode" = "8:{E096DE8D-B160-4928-A062-D1C23E1ECB88}"
         "UpgradeCode" = "8:{727218DE-2206-43E1-B002-BF4B70F0004A}"
         "AspNetVersion" = "8:2.0.50727.0"
         "RestartWWWService" = "11:FALSE"
@@ -360,7 +330,7 @@
         }
         "Shortcut"
         {
-            "{970C0BB2-C7D0-45D7-ABFA-7EC378858BC0}:_1F70E973F7104B11BDA35F12CD72405E"
+            "{970C0BB2-C7D0-45D7-ABFA-7EC378858BC0}:_1BEB5AD3DCC840F38D3030AB7F3A1B3F"
             {
             "Name" = "8:Reddit Video Studio"
             "Arguments" = "8:"
@@ -368,13 +338,13 @@
             "ShowCmd" = "3:1"
             "IconIndex" = "3:0"
             "Transitive" = "11:FALSE"
-            "Target" = "8:_C5D8DFB2CB394D268898258EEDDE18C5"
-            "Folder" = "8:_0FB242DEC26E480E98B35A993FC1B007"
+            "Target" = "8:_9B75184332374A5284FD6A4F706F1236"
+            "Folder" = "8:_1C4E1C5FEAE04A97A812A3EFA97AA7BB"
             "WorkingFolder" = "8:_6E89C2D12B744891BCB48C9EEB8B65C0"
             "Icon" = "8:_3AC66FD87AF341A88C4AC6C3144E8B2E"
             "Feature" = "8:"
             }
-            "{970C0BB2-C7D0-45D7-ABFA-7EC378858BC0}:_3D29944337D74DE3B7B2794F8D735EEC"
+            "{970C0BB2-C7D0-45D7-ABFA-7EC378858BC0}:_3A832BDD667A4E2A8067C5EE1A70C5C6"
             {
             "Name" = "8:Reddit Video Studio"
             "Arguments" = "8:"
@@ -382,8 +352,8 @@
             "ShowCmd" = "3:1"
             "IconIndex" = "3:0"
             "Transitive" = "11:FALSE"
-            "Target" = "8:_C5D8DFB2CB394D268898258EEDDE18C5"
-            "Folder" = "8:_1C4E1C5FEAE04A97A812A3EFA97AA7BB"
+            "Target" = "8:_9B75184332374A5284FD6A4F706F1236"
+            "Folder" = "8:_0FB242DEC26E480E98B35A993FC1B007"
             "WorkingFolder" = "8:_6E89C2D12B744891BCB48C9EEB8B65C0"
             "Icon" = "8:_3AC66FD87AF341A88C4AC6C3144E8B2E"
             "Feature" = "8:"
@@ -455,7 +425,7 @@
                     "UseDynamicProperties" = "11:TRUE"
                     "IsDependency" = "11:FALSE"
                     "SourcePath" = "8:<VsdDialogDir>\\VsdAdminFinishedDlg.wid"
-                    "Properties"
+                        "Properties"
                         {
                             "BannerBitmap"
                             {
@@ -694,7 +664,7 @@
                     "UseDynamicProperties" = "11:TRUE"
                     "IsDependency" = "11:FALSE"
                     "SourcePath" = "8:<VsdDialogDir>\\VsdAdminWelcomeDlg.wid"
-                    "Properties"
+                        "Properties"
                         {
                             "BannerBitmap"
                             {
@@ -764,7 +734,7 @@
                     "UseDynamicProperties" = "11:TRUE"
                     "IsDependency" = "11:FALSE"
                     "SourcePath" = "8:<VsdDialogDir>\\VsdAdminConfirmDlg.wid"
-                    "Properties"
+                        "Properties"
                         {
                             "BannerBitmap"
                             {
@@ -787,9 +757,9 @@
         }
         "ProjectOutput"
         {
-            "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_183650357846472691671C246222ABAB"
+            "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_9B75184332374A5284FD6A4F706F1236"
             {
-            "SourcePath" = "8:..\\RedditVideoStudio.Shared\\obj\\Debug\\net9.0\\RedditVideoStudio.Shared.dll"
+            "SourcePath" = "8:..\\RedditVideoStudio.UI\\obj\\Debug\\net9.0-windows\\apphost.exe"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_6E89C2D12B744891BCB48C9EEB8B65C0"
@@ -808,147 +778,7 @@
             "IsolateTo" = "8:"
             "ProjectOutputGroupRegister" = "3:1"
             "OutputConfiguration" = "8:Debug|Any CPU"
-            "OutputGroupCanonicalName" = "8:Built"
-            "OutputProjectGuid" = "8:{1D0EC7E5-F490-4313-A9D8-2534F05B460C}"
-            "ShowKeyOutput" = "11:TRUE"
-                "ExcludeFilters"
-                {
-                }
-            }
-            "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_3901787F87064CA0B83A608887918286"
-            {
-            "SourcePath" = "8:..\\RedditVideoStudio.Application\\obj\\Debug\\net9.0\\RedditVideoStudio.Application.dll"
-            "TargetName" = "8:"
-            "Tag" = "8:"
-            "Folder" = "8:_6E89C2D12B744891BCB48C9EEB8B65C0"
-            "Condition" = "8:"
-            "Transitive" = "11:FALSE"
-            "Vital" = "11:TRUE"
-            "ReadOnly" = "11:FALSE"
-            "Hidden" = "11:FALSE"
-            "System" = "11:FALSE"
-            "Permanent" = "11:FALSE"
-            "SharedLegacy" = "11:FALSE"
-            "PackageAs" = "3:1"
-            "Register" = "3:1"
-            "Exclude" = "11:FALSE"
-            "IsDependency" = "11:FALSE"
-            "IsolateTo" = "8:"
-            "ProjectOutputGroupRegister" = "3:1"
-            "OutputConfiguration" = "8:Debug|Any CPU"
-            "OutputGroupCanonicalName" = "8:Built"
-            "OutputProjectGuid" = "8:{6E5E0363-5D11-43BF-A6B6-3958F0BED8BD}"
-            "ShowKeyOutput" = "11:TRUE"
-                "ExcludeFilters"
-                {
-                }
-            }
-            "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_4CD98E6FE0ED40D598A48951F439C308"
-            {
-            "SourcePath" = "8:..\\RedditVideoStudio.Domain\\obj\\Debug\\net9.0\\RedditVideoStudio.Domain.dll"
-            "TargetName" = "8:"
-            "Tag" = "8:"
-            "Folder" = "8:_6E89C2D12B744891BCB48C9EEB8B65C0"
-            "Condition" = "8:"
-            "Transitive" = "11:FALSE"
-            "Vital" = "11:TRUE"
-            "ReadOnly" = "11:FALSE"
-            "Hidden" = "11:FALSE"
-            "System" = "11:FALSE"
-            "Permanent" = "11:FALSE"
-            "SharedLegacy" = "11:FALSE"
-            "PackageAs" = "3:1"
-            "Register" = "3:1"
-            "Exclude" = "11:FALSE"
-            "IsDependency" = "11:FALSE"
-            "IsolateTo" = "8:"
-            "ProjectOutputGroupRegister" = "3:1"
-            "OutputConfiguration" = "8:Debug|Any CPU"
-            "OutputGroupCanonicalName" = "8:Built"
-            "OutputProjectGuid" = "8:{8C826A48-F103-456B-8EC0-6B5A8710F075}"
-            "ShowKeyOutput" = "11:TRUE"
-                "ExcludeFilters"
-                {
-                }
-            }
-            "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_A9722AFD0E4C4C419F019BC9BFED0853"
-            {
-            "SourcePath" = "8:..\\RedditVideoStudio.Infrastructure\\obj\\Debug\\net9.0-windows\\RedditVideoStudio.Infrastructure.dll"
-            "TargetName" = "8:"
-            "Tag" = "8:"
-            "Folder" = "8:_6E89C2D12B744891BCB48C9EEB8B65C0"
-            "Condition" = "8:"
-            "Transitive" = "11:FALSE"
-            "Vital" = "11:TRUE"
-            "ReadOnly" = "11:FALSE"
-            "Hidden" = "11:FALSE"
-            "System" = "11:FALSE"
-            "Permanent" = "11:FALSE"
-            "SharedLegacy" = "11:FALSE"
-            "PackageAs" = "3:1"
-            "Register" = "3:1"
-            "Exclude" = "11:FALSE"
-            "IsDependency" = "11:FALSE"
-            "IsolateTo" = "8:"
-            "ProjectOutputGroupRegister" = "3:1"
-            "OutputConfiguration" = "8:Debug|Any CPU"
-            "OutputGroupCanonicalName" = "8:Built"
-            "OutputProjectGuid" = "8:{17F35C13-8546-FFEA-83C1-39D649F5D48B}"
-            "ShowKeyOutput" = "11:TRUE"
-            "ExcludeFilters"
-                {
-                }
-            }
-            "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_C48A175F05E944C78F81A1D88BD4CC3B"
-            {
-            "SourcePath" = "8:..\\RedditVideoStudio.Core\\obj\\Debug\\net9.0\\RedditVideoStudio.Core.dll"
-            "TargetName" = "8:"
-            "Tag" = "8:"
-            "Folder" = "8:_6E89C2D12B744891BCB48C9EEB8B65C0"
-            "Condition" = "8:"
-            "Transitive" = "11:FALSE"
-            "Vital" = "11:TRUE"
-            "ReadOnly" = "11:FALSE"
-            "Hidden" = "11:FALSE"
-            "System" = "11:FALSE"
-            "Permanent" = "11:FALSE"
-            "SharedLegacy" = "11:FALSE"
-            "PackageAs" = "3:1"
-            "Register" = "3:1"
-            "Exclude" = "11:FALSE"
-            "IsDependency" = "11:FALSE"
-            "IsolateTo" = "8:"
-            "ProjectOutputGroupRegister" = "3:1"
-            "OutputConfiguration" = "8:"
-            "OutputGroupCanonicalName" = "8:Built"
-            "OutputProjectGuid" = "8:{D39A78A9-4F1F-413A-B746-7CFEE5BFDFCF}"
-            "ShowKeyOutput" = "11:TRUE"
-            "ExcludeFilters"
-                {
-                }
-            }
-            "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_C5D8DFB2CB394D268898258EEDDE18C5"
-            {
-            "SourcePath" = "8:..\\RedditVideoStudio.UI\\obj\\Debug\\net9.0-windows\\RedditVideoStudio.UI.dll"
-            "TargetName" = "8:"
-            "Tag" = "8:"
-            "Folder" = "8:_6E89C2D12B744891BCB48C9EEB8B65C0"
-            "Condition" = "8:"
-            "Transitive" = "11:FALSE"
-            "Vital" = "11:TRUE"
-            "ReadOnly" = "11:FALSE"
-            "Hidden" = "11:FALSE"
-            "System" = "11:FALSE"
-            "Permanent" = "11:FALSE"
-            "SharedLegacy" = "11:FALSE"
-            "PackageAs" = "3:1"
-            "Register" = "3:1"
-            "Exclude" = "11:FALSE"
-            "IsDependency" = "11:FALSE"
-            "IsolateTo" = "8:"
-            "ProjectOutputGroupRegister" = "3:1"
-            "OutputConfiguration" = "8:Debug|Any CPU"
-            "OutputGroupCanonicalName" = "8:Built"
+            "OutputGroupCanonicalName" = "8:PublishItems"
             "OutputProjectGuid" = "8:{6EACEA04-B562-4676-A79C-A0B7D558E407}"
             "ShowKeyOutput" = "11:TRUE"
                 "ExcludeFilters"

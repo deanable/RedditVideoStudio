@@ -14,9 +14,18 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="ffmpeg\**">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <Compile Remove="bin\**" />
+    <Compile Remove="ffmpeg\**" />
+    <Compile Remove="obj\**" />
+    <EmbeddedResource Remove="bin\**" />
+    <EmbeddedResource Remove="ffmpeg\**" />
+    <EmbeddedResource Remove="obj\**" />
+    <None Remove="bin\**" />
+    <None Remove="ffmpeg\**" />
+    <None Remove="obj\**" />
+    <Page Remove="bin\**" />
+    <Page Remove="ffmpeg\**" />
+    <Page Remove="obj\**" />
   </ItemGroup>
 
   <ItemGroup>
@@ -42,6 +51,10 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Properties\PublishProfiles\" />
   </ItemGroup>
 
 </Project>
