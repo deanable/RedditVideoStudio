@@ -1,4 +1,4 @@
-﻿// In: C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Application\Services\PublishingService.cs
+﻿// C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Application\Services\PublishingService.cs
 
 namespace RedditVideoStudio.Application.Services
 {
@@ -14,9 +14,6 @@ namespace RedditVideoStudio.Application.Services
     using RedditVideoStudio.Shared.Models;
     using RedditVideoStudio.Shared.Utilities;
 
-    /// <summary>
-    /// Service responsible for orchestrating the video creation and publishing process.
-    /// </summary>
     public class PublishingService : IPublishingService
     {
         private readonly IVideoComposer _videoComposer;
@@ -27,16 +24,6 @@ namespace RedditVideoStudio.Application.Services
         private readonly IImageService _imageService;
         private readonly IAppConfiguration _appConfig;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PublishingService"/> class.
-        /// </summary>
-        /// <param name="videoComposer">The video composer service.</param>
-        /// <param name="allDestinations">All available video destinations.</param>
-        /// <param name="logger">The logger instance.</param>
-        /// <param name="tempDirectoryFactory">The temporary directory factory.</param>
-        /// <param name="pexelsService">The Pexels service for background videos/images.</param>
-        /// <param name="imageService">The image service for generating thumbnails and overlays.</param>
-        /// <param name="appConfig">The application configuration.</param>
         public PublishingService(
             IVideoComposer videoComposer,
             IEnumerable<IVideoDestination> allDestinations,
@@ -55,13 +42,6 @@ namespace RedditVideoStudio.Application.Services
             _appConfig = appConfig;
         }
 
-        /// <summary>
-        /// Publishes a video to the specified destinations.
-        /// </summary>
-        /// <param name="post">The Reddit post data.</param>
-        /// <param name="destinationNames">The names of the destinations to publish to.</param>
-        /// <param name="progress">The progress reporter.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
         public async Task PublishVideoAsync(RedditPostData post, IEnumerable<string> destinationNames, IProgress<ProgressReport> progress, CancellationToken cancellationToken)
         {
             var targetDestinations = _allDestinations.Where(d => destinationNames.Contains(d.Name)).ToList();
@@ -73,7 +53,6 @@ namespace RedditVideoStudio.Application.Services
 
             using (var tempDirectory = _tempDirectoryFactory.Create())
             {
-                // Generate one thumbnail to be used for all destinations for this post
                 string? thumbnailPath = await GenerateThumbnailForPost(post, tempDirectory.Path, cancellationToken);
 
                 foreach (var destination in targetDestinations)
@@ -96,17 +75,16 @@ namespace RedditVideoStudio.Application.Services
                     }
 
                     _logger.LogInformation("Uploading video to {Destination}...", destination.Name);
-
-                    // Corrected: Added the 'Description' field to the VideoDetails object.
-                    // The description is created from the post title and the first few comments.
                     var videoDescription = $"{post.Title}\n\n{string.Join("\n\n", post.Comments.Take(3))}";
 
+                    // --- FIX: Pass the ScheduledPublishTime from the post data to the VideoDetails object ---
                     await destination.UploadVideoAsync(
                         finalVideoPath,
                         new VideoDetails
                         {
                             Title = post.Title ?? "Reddit Story",
-                            Description = videoDescription
+                            Description = videoDescription,
+                            ScheduledPublishTime = post.ScheduledPublishTimeUtc
                         },
                         thumbnailPath,
                         cancellationToken);

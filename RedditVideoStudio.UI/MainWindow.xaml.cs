@@ -6,7 +6,7 @@ using RedditVideoStudio.Core.Exceptions;
 using RedditVideoStudio.Core.Interfaces;
 using RedditVideoStudio.Domain.Models;
 using RedditVideoStudio.Shared.Models;
-using RedditVideoStudio.Shared.Utilities; // Added for TextUtils
+using RedditVideoStudio.Shared.Utilities;
 using RedditVideoStudio.UI.Logging;
 using RedditVideoStudio.UI.ViewModels;
 using System;
@@ -50,15 +50,15 @@ namespace RedditVideoStudio.UI
             DelegatingSink.SetSink(textBoxSink);
 
             _logger.LogInformation("Application Main Window Initialized.");
-            // Fire and forget the loading process
             _ = LoadTopPostsAsync();
         }
 
         private async void GenerateVideo_Click(object sender, RoutedEventArgs e)
         {
             var selectedPosts = RedditPostListBox.SelectedItems.Cast<RedditPostViewModel>()
-                                               .Where(p => !p.IsAlreadyUploaded) // Ensure we only process non-uploaded posts
+                                               .Where(p => !p.IsAlreadyUploaded)
                                                .ToList();
+
             if (!selectedPosts.Any())
             {
                 MessageBox.Show("Please select at least one Reddit post that has not already been uploaded.", "No Selection", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -86,17 +86,20 @@ namespace RedditVideoStudio.UI
 
             try
             {
-                foreach (var post in selectedPosts)
+                foreach (var postViewModel in selectedPosts)
                 {
                     _cancellationTokenSource.Token.ThrowIfCancellationRequested();
+
+                    // --- FIX: When creating the data model, copy the scheduled time from the view model ---
                     var postData = new RedditPostData
                     {
-                        Title = post.Title ?? string.Empty,
-                        Comments = post.Comments
+                        Title = postViewModel.Title ?? string.Empty,
+                        Comments = postViewModel.Comments,
+                        ScheduledPublishTimeUtc = postViewModel.ScheduledPublishTimeUtc
                     };
+
                     await _publishingService.PublishVideoAsync(postData, enabledDestinationNames, progress, _cancellationTokenSource.Token);
-                    // Mark as uploaded after successful processing
-                    post.IsAlreadyUploaded = true;
+                    postViewModel.IsAlreadyUploaded = true;
                 }
                 MessageBox.Show("All publishing tasks completed!", "Done", MessageBoxButton.OK, MessageBoxImage.Information);
             }
@@ -117,7 +120,6 @@ namespace RedditVideoStudio.UI
                 _logger.LogInformation("Fetching top Reddit posts...");
                 var posts = await _redditService.FetchFullPostDataAsync(CancellationToken.None);
 
-                // Get the YouTube destination service to check for existing videos
                 var youTubeDestination = _serviceProvider.GetRequiredService<IEnumerable<IVideoDestination>>().FirstOrDefault(d => d.Name == "YouTube");
                 HashSet<string> uploadedTitles = new();
 
@@ -145,12 +147,10 @@ namespace RedditVideoStudio.UI
                             Url = post.Url,
                             Permalink = post.Permalink,
                             Comments = post.Comments.ToList(),
-                            // Set the property based on whether the title exists in the fetched list
                             IsAlreadyUploaded = uploadedTitles.Contains(sanitizedTitle)
                         });
                     }
                 });
-
                 _logger.LogInformation("Loaded {Count} posts. Marked {UploadedCount} as already uploaded to YouTube.", _fetchedPosts.Count, _fetchedPosts.Count(p => p.IsAlreadyUploaded));
             }
             catch (Exception ex)
@@ -169,7 +169,6 @@ namespace RedditVideoStudio.UI
             var settingsWindow = _serviceProvider.GetRequiredService<SettingsWindow>();
             settingsWindow.Owner = this;
             settingsWindow.ShowDialog();
-            // After settings close, reload posts to reflect any new authentications
             _ = LoadTopPostsAsync();
         }
 
@@ -178,6 +177,7 @@ namespace RedditVideoStudio.UI
             _logger.LogError(ex, "An error occurred: {ErrorMessage}", ex.Message);
             string title = "Error";
             string message = $"An unexpected error occurred:\n\n{ex.Message}";
+
             switch (ex)
             {
                 case AppConfigurationException configEx:

@@ -1,4 +1,6 @@
-﻿namespace RedditVideoStudio.Domain.Models
+﻿// C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Domain\Models\RedditPostData.cs
+
+namespace RedditVideoStudio.Domain.Models
 {
     /// <summary>
     /// Represents the core data of a Reddit post, including its title,
@@ -14,5 +16,12 @@
         public string Permalink { get; set; } = "";
         public int Score { get; set; }
         public List<string> Comments { get; set; } = new();
+
+        // --- FIX: Added property to hold the scheduled publish time ---
+        /// <summary>
+        /// The UTC date and time when the video should be published.
+        /// This is null if the video is not scheduled.
+        /// </summary>
+        public DateTime? ScheduledPublishTimeUtc { get; set; }
     }
 }
