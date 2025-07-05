@@ -42,7 +42,7 @@
                                 <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="18" VerticalAlignment="Center"/>
 
                                 <StackPanel Grid.Column="3" Orientation="Horizontal">
-                                    <Button Content="Connect" Command="{Binding AuthenticateCommand}" IsEnabled="{Binding !IsBusy}">
+                                    <Button Content="Connect" Command="{Binding AuthenticateCommand}">
                                         <Button.Style>
                                             <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                                                 <Setter Property="Visibility" Value="Collapsed"/>
@@ -50,17 +50,24 @@
                                                     <DataTrigger Binding="{Binding IsAuthenticated}" Value="False">
                                                         <Setter Property="Visibility" Value="Visible"/>
                                                     </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsBusy}" Value="True">
+                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                    </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
                                         </Button.Style>
                                     </Button>
-                                    <Button Content="Disconnect" Command="{Binding SignOutCommand}" Margin="5,0,0,0" IsEnabled="{Binding !IsBusy}">
+
+                                    <Button Content="Disconnect" Command="{Binding SignOutCommand}" Margin="5,0,0,0">
                                         <Button.Style>
                                             <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                                                 <Setter Property="Visibility" Value="Collapsed"/>
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding IsAuthenticated}" Value="True">
                                                         <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsBusy}" Value="True">
+                                                        <Setter Property="IsEnabled" Value="False"/>
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
