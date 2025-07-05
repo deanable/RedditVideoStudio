@@ -50,6 +50,7 @@ namespace RedditVideoStudio.UI
             DelegatingSink.SetSink(textBoxSink);
 
             _logger.LogInformation("Application Main Window Initialized.");
+            // Fire and forget the loading process with the new inverted logic
             _ = LoadTopPostsAsync();
         }
 
@@ -72,7 +73,7 @@ namespace RedditVideoStudio.UI
 
             if (!enabledDestinationNames.Any())
             {
-                MessageBox.Show("No destination platforms are enabled. Please enable and connect at least one in Settings.", "No Destinations", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("No destination platforms are enabled. Please enable at least one in Settings.", "No Destinations", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -90,11 +91,12 @@ namespace RedditVideoStudio.UI
                 {
                     _cancellationTokenSource.Token.ThrowIfCancellationRequested();
 
-                    // --- FIX: When creating the data model, copy the scheduled time from the view model ---
                     var postData = new RedditPostData
                     {
                         Title = postViewModel.Title ?? string.Empty,
                         Comments = postViewModel.Comments,
+                        Permalink = postViewModel.Permalink ?? string.Empty,
+                        Subreddit = postViewModel.Subreddit ?? string.Empty,
                         ScheduledPublishTimeUtc = postViewModel.ScheduledPublishTimeUtc
                     };
 
@@ -113,31 +115,44 @@ namespace RedditVideoStudio.UI
             }
         }
 
+        // --- REFACTORED: This method now implements the new, inverted application logic ---
         private async Task LoadTopPostsAsync()
         {
             try
             {
+                _fetchedPosts.Clear();
+                var allDestinations = _serviceProvider.GetRequiredService<IEnumerable<IVideoDestination>>();
+                var authenticatedDestinations = allDestinations.Where(d => d.IsAuthenticated).ToList();
+
+                // Step 1: Check if at least one platform is authenticated.
+                if (!authenticatedDestinations.Any())
+                {
+                    _logger.LogWarning("No authenticated platforms found. Prompting user to configure settings.");
+                    MessageBox.Show("No social media accounts are connected. Please go to Settings to connect at least one account before fetching posts.", "Authentication Required", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return; // Stop the process
+                }
+
+                _logger.LogInformation("Authenticated platforms found: {Platforms}", string.Join(", ", authenticatedDestinations.Select(d => d.Name)));
+
+                // Step 2: Get all previously uploaded video titles from all connected platforms.
+                var allUploadedTitles = new HashSet<string>();
+                foreach (var destination in authenticatedDestinations)
+                {
+                    var titles = await destination.GetUploadedVideoTitlesAsync(CancellationToken.None);
+                    allUploadedTitles.UnionWith(titles); // Combine all titles into a single set
+                }
+                _logger.LogInformation("Found {Count} unique video titles across all connected platforms.", allUploadedTitles.Count);
+
+                // Step 3: Load posts from Reddit.
                 _logger.LogInformation("Fetching top Reddit posts...");
                 var posts = await _redditService.FetchFullPostDataAsync(CancellationToken.None);
 
-                var youTubeDestination = _serviceProvider.GetRequiredService<IEnumerable<IVideoDestination>>().FirstOrDefault(d => d.Name == "YouTube");
-                HashSet<string> uploadedTitles = new();
-
-                if (youTubeDestination != null && youTubeDestination.IsAuthenticated)
-                {
-                    uploadedTitles = await youTubeDestination.GetUploadedVideoTitlesAsync(CancellationToken.None);
-                }
-                else
-                {
-                    _logger.LogWarning("YouTube is not authenticated. Cannot check for existing videos.");
-                }
-
+                // Step 4: Check for duplication and populate the UI.
                 await Dispatcher.InvokeAsync(() =>
                 {
-                    _fetchedPosts.Clear();
                     foreach (var post in posts)
                     {
-                        var sanitizedTitle = TextUtils.SanitizeYouTubeTitle(post.Title);
+                        var sanitizedTitle = TextUtils.SanitizeYouTubeTitle($"(r/{post.Subreddit}) - {post.Title ?? "Reddit Story"}");
                         _fetchedPosts.Add(new RedditPostViewModel
                         {
                             Id = post.Id,
@@ -147,11 +162,11 @@ namespace RedditVideoStudio.UI
                             Url = post.Url,
                             Permalink = post.Permalink,
                             Comments = post.Comments.ToList(),
-                            IsAlreadyUploaded = uploadedTitles.Contains(sanitizedTitle)
+                            IsAlreadyUploaded = allUploadedTitles.Contains(sanitizedTitle)
                         });
                     }
                 });
-                _logger.LogInformation("Loaded {Count} posts. Marked {UploadedCount} as already uploaded to YouTube.", _fetchedPosts.Count, _fetchedPosts.Count(p => p.IsAlreadyUploaded));
+                _logger.LogInformation("Loaded {Count} posts. Marked {UploadedCount} as already uploaded.", _fetchedPosts.Count, _fetchedPosts.Count(p => p.IsAlreadyUploaded));
             }
             catch (Exception ex)
             {
@@ -169,6 +184,7 @@ namespace RedditVideoStudio.UI
             var settingsWindow = _serviceProvider.GetRequiredService<SettingsWindow>();
             settingsWindow.Owner = this;
             settingsWindow.ShowDialog();
+            // After settings are saved, reload everything with the new logic
             _ = LoadTopPostsAsync();
         }
 
