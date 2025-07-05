@@ -39,12 +39,6 @@
         }
         "Entry"
         {
-        "MsmKey" = "8:_87F8D9994B6F4A26931E2BE90859B6D0"
-        "OwnerKey" = "8:_UNDEFINED"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
         "MsmKey" = "8:_A9722AFD0E4C4C419F019BC9BFED0853"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
@@ -52,6 +46,12 @@
         "Entry"
         {
         "MsmKey" = "8:_C48A175F05E944C78F81A1D88BD4CC3B"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_C5D8DFB2CB394D268898258EEDDE18C5"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
         }
@@ -368,7 +368,7 @@
             "ShowCmd" = "3:1"
             "IconIndex" = "3:0"
             "Transitive" = "11:FALSE"
-            "Target" = "8:_87F8D9994B6F4A26931E2BE90859B6D0"
+            "Target" = "8:"
             "Folder" = "8:_0FB242DEC26E480E98B35A993FC1B007"
             "WorkingFolder" = "8:_6E89C2D12B744891BCB48C9EEB8B65C0"
             "Icon" = "8:_3AC66FD87AF341A88C4AC6C3144E8B2E"
@@ -382,7 +382,7 @@
             "ShowCmd" = "3:1"
             "IconIndex" = "3:0"
             "Transitive" = "11:FALSE"
-            "Target" = "8:_87F8D9994B6F4A26931E2BE90859B6D0"
+            "Target" = "8:"
             "Folder" = "8:_1C4E1C5FEAE04A97A812A3EFA97AA7BB"
             "WorkingFolder" = "8:_6E89C2D12B744891BCB48C9EEB8B65C0"
             "Icon" = "8:_3AC66FD87AF341A88C4AC6C3144E8B2E"
@@ -871,34 +871,6 @@
                 {
                 }
             }
-            "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_87F8D9994B6F4A26931E2BE90859B6D0"
-            {
-            "SourcePath" = "8:..\\RedditVideoStudio.UI\\obj\\Debug\\net9.0-windows\\RedditVideoStudio.UI.dll"
-            "TargetName" = "8:"
-            "Tag" = "8:"
-            "Folder" = "8:_6E89C2D12B744891BCB48C9EEB8B65C0"
-            "Condition" = "8:"
-            "Transitive" = "11:FALSE"
-            "Vital" = "11:TRUE"
-            "ReadOnly" = "11:FALSE"
-            "Hidden" = "11:FALSE"
-            "System" = "11:FALSE"
-            "Permanent" = "11:FALSE"
-            "SharedLegacy" = "11:FALSE"
-            "PackageAs" = "3:1"
-            "Register" = "3:1"
-            "Exclude" = "11:FALSE"
-            "IsDependency" = "11:FALSE"
-            "IsolateTo" = "8:"
-            "ProjectOutputGroupRegister" = "3:1"
-            "OutputConfiguration" = "8:Debug|Any CPU"
-            "OutputGroupCanonicalName" = "8:Built"
-            "OutputProjectGuid" = "8:{6EACEA04-B562-4676-A79C-A0B7D558E407}"
-            "ShowKeyOutput" = "11:TRUE"
-                "ExcludeFilters"
-                {
-                }
-            }
             "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_A9722AFD0E4C4C419F019BC9BFED0853"
             {
             "SourcePath" = "8:..\\RedditVideoStudio.Infrastructure\\obj\\Debug\\net9.0-windows\\RedditVideoStudio.Infrastructure.dll"
@@ -950,6 +922,34 @@
             "OutputConfiguration" = "8:"
             "OutputGroupCanonicalName" = "8:Built"
             "OutputProjectGuid" = "8:{D39A78A9-4F1F-413A-B746-7CFEE5BFDFCF}"
+            "ShowKeyOutput" = "11:TRUE"
+                "ExcludeFilters"
+                {
+                }
+            }
+            "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_C5D8DFB2CB394D268898258EEDDE18C5"
+            {
+            "SourcePath" = "8:..\\RedditVideoStudio.UI\\obj\\Debug\\net9.0-windows\\RedditVideoStudio.UI.dll"
+            "TargetName" = "8:"
+            "Tag" = "8:"
+            "Folder" = "8:_6E89C2D12B744891BCB48C9EEB8B65C0"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            "ProjectOutputGroupRegister" = "3:1"
+            "OutputConfiguration" = "8:Debug|Any CPU"
+            "OutputGroupCanonicalName" = "8:Built"
+            "OutputProjectGuid" = "8:{6EACEA04-B562-4676-A79C-A0B7D558E407}"
             "ShowKeyOutput" = "11:TRUE"
                 "ExcludeFilters"
                 {
