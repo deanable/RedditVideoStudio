@@ -20,30 +20,54 @@ namespace RedditVideoStudio.Infrastructure.Services
     using System.Collections.Generic;
     using RedditVideoStudio.Shared.Utilities;
 
+    /// <summary>
+    /// Represents the YouTube video destination, handling authentication, uploading,
+    /// and checking for existing videos on the user's channel.
+    /// </summary>
     public class YouTubeDestination : IVideoDestination
     {
-        // ... (Constructor and other methods remain the same) ...
-
         private readonly ILogger<YouTubeDestination> _logger;
         private UserCredential? _credential;
         private readonly FileDataStore _fileDataStore;
         private const string CredentialDataStoreKey = "YouTube.Api.Auth.Store";
         private const string ClientSecretFileName = "client_secrets.json";
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="YouTubeDestination"/> class.
+        /// </summary>
+        /// <param name="logger">The logger instance for logging information and errors.</param>
         public YouTubeDestination(ILogger<YouTubeDestination> logger)
         {
             _logger = logger;
+
+            // Define the path for storing OAuth 2.0 credentials.
             var dataStorePath = Path.Combine(AppContext.BaseDirectory, CredentialDataStoreKey);
 
+            // Ensure the directory for the FileDataStore exists before creating an instance of it.
             if (!Directory.Exists(dataStorePath))
             {
                 _logger.LogInformation("Creating FileDataStore directory at: {Path}", dataStorePath);
                 Directory.CreateDirectory(dataStorePath);
             }
 
+            // Initialize the FileDataStore, which will manage the storage and retrieval of user credentials.
             _fileDataStore = new FileDataStore(dataStorePath, true);
         }
+
+        /// <summary>
+        /// Gets the name of the destination.
+        /// </summary>
         public string Name => "YouTube";
+
+        /// <summary>
+        /// Gets a value indicating whether the user is currently authenticated and the token is not expired.
+        /// </summary>
         public bool IsAuthenticated => _credential != null && !_credential.Token.IsExpired(_credential.Flow.Clock);
+
+        /// <summary>
+        /// Initiates the OAuth 2.0 authentication process with Google for YouTube.
+        /// </summary>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
         public async Task AuthenticateAsync(CancellationToken cancellationToken = default)
         {
             var clientSecretFilePath = Path.Combine(AppContext.BaseDirectory, ClientSecretFileName);
@@ -59,9 +83,17 @@ namespace RedditVideoStudio.Infrastructure.Services
                 await using var stream = new FileStream(clientSecretFilePath, FileMode.Open, FileAccess.Read);
                 var clientSecrets = await GoogleClientSecrets.FromStreamAsync(stream, cancellationToken);
 
+                // --- FIX: Added 'YoutubeReadonly' scope ---
+                // To list and search for videos (to check for duplicates), we need read-only access
+                // in addition to the upload permission.
+                var scopes = new[] {
+                    YouTubeService.Scope.YoutubeUpload,
+                    YouTubeService.Scope.YoutubeReadonly
+                };
+
                 _credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
                     clientSecrets.Secrets,
-                    new[] { YouTubeService.Scope.YoutubeUpload },
+                    scopes, // Use the updated scopes array
                     "user",
                     cancellationToken,
                     _fileDataStore);
@@ -72,7 +104,7 @@ namespace RedditVideoStudio.Infrastructure.Services
                 }
                 else
                 {
-                    throw new YouTubeApiException("Authentication was not successful. The user may have cancelled the operation.");
+                    throw new YouTubeApiException("Authentication was not successful. The user may have cancelled the operation or there was an issue with the credentials.");
                 }
             }
             catch (Exception ex)
@@ -81,28 +113,35 @@ namespace RedditVideoStudio.Infrastructure.Services
                 throw new YouTubeApiException($"An unexpected error occurred during authentication. Please ensure '{ClientSecretFileName}' is valid and that you have added 'http://localhost' as a redirect URI in your Google Cloud project.", ex);
             }
         }
-        public Task SignOutAsync()
+
+        /// <summary>
+        /// Signs the user out by clearing their stored credentials.
+        /// </summary>
+        public async Task SignOutAsync()
         {
             _credential = null;
             try
             {
-                var dataStorePath = Path.Combine(AppContext.BaseDirectory, CredentialDataStoreKey);
-                if (Directory.Exists(dataStorePath))
-                {
-                    Directory.Delete(dataStorePath, true);
-                    _logger.LogInformation("Successfully deleted YouTube credential data store at: {Path}", dataStorePath);
-                }
-                else
-                {
-                    _logger.LogWarning("YouTube credential data store not found at {Path}, nothing to delete.", dataStorePath);
-                }
+                // --- FIX: Use FileDataStore.ClearAsync() instead of Directory.Delete() ---
+                // This is the correct way to clear the credentials. It removes the token file(s)
+                // from within the data store directory but leaves the directory itself intact,
+                // preventing the DirectoryNotFoundException on subsequent logins.
+                await _fileDataStore.ClearAsync();
+                _logger.LogInformation("Successfully cleared YouTube credential data store.");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to delete the YouTube credential data store.");
             }
-            return Task.CompletedTask;
         }
+
+        /// <summary>
+        /// Uploads a video file and its metadata to the authenticated user's YouTube channel.
+        /// </summary>
+        /// <param name="videoPath">The path to the video file.</param>
+        /// <param name="videoDetails">Metadata for the video (title, description, etc.).</param>
+        /// <param name="thumbnailPath">The path to the thumbnail image.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
         public async Task UploadVideoAsync(string videoPath, VideoDetails videoDetails, string? thumbnailPath, CancellationToken cancellationToken = default)
         {
             if (!IsAuthenticated || _credential == null)
@@ -127,7 +166,7 @@ namespace RedditVideoStudio.Infrastructure.Services
                 },
                 Status = new VideoStatus
                 {
-                    PrivacyStatus = "private"
+                    PrivacyStatus = "private" // Default to private
                 }
             };
 
@@ -165,6 +204,13 @@ namespace RedditVideoStudio.Infrastructure.Services
                 }
             }
         }
+
+        /// <summary>
+        /// Checks if a video with the specified title already exists on the channel.
+        /// </summary>
+        /// <param name="title">The title of the video to check.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <returns>True if a video with the exact title exists; otherwise, false.</returns>
         public async Task<bool> DoesVideoExistAsync(string title, CancellationToken cancellationToken = default)
         {
             if (!IsAuthenticated || _credential == null)
@@ -198,7 +244,7 @@ namespace RedditVideoStudio.Infrastructure.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to search for existing videos on YouTube.");
-                return false;
+                return false; // Fail safely
             }
         }
 
@@ -233,6 +279,7 @@ namespace RedditVideoStudio.Infrastructure.Services
                 searchRequest.PageToken = nextPageToken;
 
                 var searchResponse = await searchRequest.ExecuteAsync(cancellationToken);
+
                 foreach (var searchResult in searchResponse.Items)
                 {
                     var sanitizedTitle = TextUtils.SanitizeYouTubeTitle(searchResult.Snippet.Title);
