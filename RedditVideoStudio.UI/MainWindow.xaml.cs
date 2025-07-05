@@ -19,8 +19,12 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 
+// --- FIXED: Added the namespace declaration ---
 namespace RedditVideoStudio.UI
 {
+    /// <summary>
+    /// Interaction logic for MainWindow.xaml
+    /// </summary>
     public partial class MainWindow : Window
     {
         private readonly ILogger<MainWindow> _logger;
@@ -28,6 +32,7 @@ namespace RedditVideoStudio.UI
         private readonly IRedditService _redditService;
         private readonly IAppConfiguration _configService;
         private readonly IPublishingService _publishingService;
+        private readonly IFfmpegDownloaderService _ffmpegDownloader;
         private readonly ObservableCollection<RedditPostViewModel> _fetchedPosts = new();
         private CancellationTokenSource _cancellationTokenSource = new();
 
@@ -36,7 +41,8 @@ namespace RedditVideoStudio.UI
              IServiceProvider serviceProvider,
              IRedditService redditService,
              IAppConfiguration configService,
-             IPublishingService publishingService)
+             IPublishingService publishingService,
+             IFfmpegDownloaderService ffmpegDownloader)
         {
             InitializeComponent();
             _logger = logger;
@@ -44,14 +50,41 @@ namespace RedditVideoStudio.UI
             _redditService = redditService;
             _configService = configService;
             _publishingService = publishingService;
+            _ffmpegDownloader = ffmpegDownloader;
 
             RedditPostListBox.ItemsSource = _fetchedPosts;
             var textBoxSink = new TextBoxSink(LogTextBox, Dispatcher);
             DelegatingSink.SetSink(textBoxSink);
 
             _logger.LogInformation("Application Main Window Initialized.");
-            // Fire and forget the loading process with the new inverted logic
-            _ = LoadTopPostsAsync();
+            this.Loaded += MainWindow_Loaded;
+        }
+
+        private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            this.Loaded -= MainWindow_Loaded;
+            await InitializeApplicationAsync();
+        }
+
+        private async Task InitializeApplicationAsync()
+        {
+            MainGrid.IsEnabled = false;
+            try
+            {
+                _logger.LogInformation("Starting application initialization...");
+                var progress = new Progress<string>(message => _logger.LogInformation(message));
+                await _ffmpegDownloader.EnsureFfmpegIsAvailableAsync(progress, CancellationToken.None);
+                await LoadTopPostsAsync();
+            }
+            catch (Exception ex)
+            {
+                HandleException(ex);
+            }
+            finally
+            {
+                MainGrid.IsEnabled = true;
+                _logger.LogInformation("Initialization complete.");
+            }
         }
 
         private async void GenerateVideo_Click(object sender, RoutedEventArgs e)
@@ -59,7 +92,6 @@ namespace RedditVideoStudio.UI
             var selectedPosts = RedditPostListBox.SelectedItems.Cast<RedditPostViewModel>()
                                                .Where(p => !p.IsAlreadyUploaded)
                                                .ToList();
-
             if (!selectedPosts.Any())
             {
                 MessageBox.Show("Please select at least one Reddit post that has not already been uploaded.", "No Selection", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -70,7 +102,6 @@ namespace RedditVideoStudio.UI
                 .Where(kvp => kvp.Value)
                 .Select(kvp => kvp.Key)
                 .ToList();
-
             if (!enabledDestinationNames.Any())
             {
                 MessageBox.Show("No destination platforms are enabled. Please enable at least one in Settings.", "No Destinations", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -84,22 +115,20 @@ namespace RedditVideoStudio.UI
                 GenerationProgressBar.Value = report.Percentage;
                 _logger.LogInformation("[{Percentage}%] {Message}", report.Percentage, report.Message);
             });
-
             try
             {
                 foreach (var postViewModel in selectedPosts)
                 {
                     _cancellationTokenSource.Token.ThrowIfCancellationRequested();
-
                     var postData = new RedditPostData
                     {
                         Title = postViewModel.Title ?? string.Empty,
+                        SelfText = postViewModel.SelfText ?? string.Empty,
                         Comments = postViewModel.Comments,
                         Permalink = postViewModel.Permalink ?? string.Empty,
                         Subreddit = postViewModel.Subreddit ?? string.Empty,
                         ScheduledPublishTimeUtc = postViewModel.ScheduledPublishTimeUtc
                     };
-
                     await _publishingService.PublishVideoAsync(postData, enabledDestinationNames, progress, _cancellationTokenSource.Token);
                     postViewModel.IsAlreadyUploaded = true;
                 }
@@ -115,7 +144,6 @@ namespace RedditVideoStudio.UI
             }
         }
 
-        // --- REFACTORED: This method now implements the new, inverted application logic ---
         private async Task LoadTopPostsAsync()
         {
             try
@@ -123,31 +151,23 @@ namespace RedditVideoStudio.UI
                 _fetchedPosts.Clear();
                 var allDestinations = _serviceProvider.GetRequiredService<IEnumerable<IVideoDestination>>();
                 var authenticatedDestinations = allDestinations.Where(d => d.IsAuthenticated).ToList();
-
-                // Step 1: Check if at least one platform is authenticated.
                 if (!authenticatedDestinations.Any())
                 {
                     _logger.LogWarning("No authenticated platforms found. Prompting user to configure settings.");
                     MessageBox.Show("No social media accounts are connected. Please go to Settings to connect at least one account before fetching posts.", "Authentication Required", MessageBoxButton.OK, MessageBoxImage.Information);
-                    return; // Stop the process
+                    return;
                 }
 
                 _logger.LogInformation("Authenticated platforms found: {Platforms}", string.Join(", ", authenticatedDestinations.Select(d => d.Name)));
-
-                // Step 2: Get all previously uploaded video titles from all connected platforms.
                 var allUploadedTitles = new HashSet<string>();
                 foreach (var destination in authenticatedDestinations)
                 {
                     var titles = await destination.GetUploadedVideoTitlesAsync(CancellationToken.None);
-                    allUploadedTitles.UnionWith(titles); // Combine all titles into a single set
+                    allUploadedTitles.UnionWith(titles);
                 }
                 _logger.LogInformation("Found {Count} unique video titles across all connected platforms.", allUploadedTitles.Count);
-
-                // Step 3: Load posts from Reddit.
                 _logger.LogInformation("Fetching top Reddit posts...");
                 var posts = await _redditService.FetchFullPostDataAsync(CancellationToken.None);
-
-                // Step 4: Check for duplication and populate the UI.
                 await Dispatcher.InvokeAsync(() =>
                 {
                     foreach (var post in posts)
@@ -157,6 +177,7 @@ namespace RedditVideoStudio.UI
                         {
                             Id = post.Id,
                             Title = post.Title,
+                            SelfText = post.SelfText,
                             Score = post.Score,
                             Subreddit = post.Subreddit,
                             Url = post.Url,
@@ -184,7 +205,6 @@ namespace RedditVideoStudio.UI
             var settingsWindow = _serviceProvider.GetRequiredService<SettingsWindow>();
             settingsWindow.Owner = this;
             settingsWindow.ShowDialog();
-            // After settings are saved, reload everything with the new logic
             _ = LoadTopPostsAsync();
         }
 
@@ -193,7 +213,6 @@ namespace RedditVideoStudio.UI
             _logger.LogError(ex, "An error occurred: {ErrorMessage}", ex.Message);
             string title = "Error";
             string message = $"An unexpected error occurred:\n\n{ex.Message}";
-
             switch (ex)
             {
                 case AppConfigurationException configEx:

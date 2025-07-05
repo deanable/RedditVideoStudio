@@ -12,6 +12,9 @@ using Serilog;
 using System;
 using System.IO;
 using System.Windows;
+using RedditVideoStudio.Core.Interfaces; // ADDED
+using RedditVideoStudio.Infrastructure.Services; // ADDED
+
 
 namespace RedditVideoStudio.UI
 {
@@ -70,6 +73,9 @@ namespace RedditVideoStudio.UI
                     services.AddTransient<IVideoSegmentGenerator, VideoSegmentGenerator>();
                     services.AddSingleton<IVideoComposer, VideoComposer>();
                     services.AddSingleton<IPublishingService, PublishingService>();
+
+                    // --- ADDED: Register the new FFmpeg downloader service ---
+                    services.AddSingleton<IFfmpegDownloaderService, FfmpegDownloaderService>();
 
                     services.AddTransient<ITextToSpeechService>(serviceProvider =>
                     {

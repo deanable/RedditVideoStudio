@@ -8,8 +8,8 @@ namespace RedditVideoStudio.UI.ViewModels
     /// <summary>
     /// The ViewModel for a single Reddit post displayed in the main window.
     /// It wraps the RedditPostData domain model and implements INotifyPropertyChanged
-    /// to support data binding in the UI. [cite: 1]
-                /// </summary>
+    /// to support data binding in the UI.
+    /// </summary>
     public class RedditPostViewModel : INotifyPropertyChanged
     {
         private string? _id;
@@ -24,6 +24,14 @@ namespace RedditVideoStudio.UI.ViewModels
         {
             get => _title;
             set { _title = value; OnPropertyChanged(); }
+        }
+
+        // --- ADDED: SelfText property to match the data model ---
+        private string? _selfText;
+        public string? SelfText
+        {
+            get => _selfText;
+            set { _selfText = value; OnPropertyChanged(); }
         }
 
         private int _score;
@@ -63,7 +71,7 @@ namespace RedditVideoStudio.UI.ViewModels
 
         private DateTime? _scheduledPublishTimeUtc;
         /// <summary>
-        /// The specific date and time this post's video should be published. [cite: 1]
+        /// The specific date and time this post's video should be published.
         /// </summary>
         public DateTime? ScheduledPublishTimeUtc
         {
@@ -78,7 +86,7 @@ namespace RedditVideoStudio.UI.ViewModels
         }
 
         /// <summary>
-        /// A helper property to bind the DatePicker to just the Date part of the schedule. [cite: 1]
+        /// A helper property to bind the DatePicker to just the Date part of the schedule.
         /// </summary>
         public DateTime? ScheduledDate
         {
@@ -94,7 +102,7 @@ namespace RedditVideoStudio.UI.ViewModels
         }
 
         /// <summary>
-        /// A helper property to bind the TextBox to the Time part of the schedule. [cite: 1]
+        /// A helper property to bind the TextBox to the Time part of the schedule.
         /// </summary>
         public string ScheduledTime
         {
@@ -109,7 +117,6 @@ namespace RedditVideoStudio.UI.ViewModels
             }
         }
 
-        // ADDED: Property to track the upload status for UI binding.
         private bool _isAlreadyUploaded;
         public bool IsAlreadyUploaded
         {

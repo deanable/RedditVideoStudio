@@ -12,7 +12,7 @@
         <converters:NotNullToBooleanConverter x:Key="NotNullToBooleanConverter"/>
     </Window.Resources>
 
-    <Grid>
+    <Grid x:Name="MainGrid">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="2*" MinWidth="300"/>
             <ColumnDefinition Width="3*" MinWidth="400"/>
@@ -23,7 +23,7 @@
                 <Button Content="Refresh Posts" Click="RefreshPosts_Click" Margin="0,0,10,0" Padding="10,5"/>
                 <Button Content="Settings" Click="OpenSettings_Click" Margin="0,0,10,0" Padding="10,5"/>
                 <CheckBox x:Name="AutoScheduleCheckBox" Content="Auto-Schedule" VerticalAlignment="Center" Margin="15,0,0,0"
-                ToolTip="Check this to automatically schedule uploads starting from the current time."/>
+             ToolTip="Check this to automatically schedule uploads starting from the current time."/>
                 <CheckBox x:Name="PublishToTikTokCheckBox" Content="Publish to TikTok" VerticalAlignment="Center" Margin="15,0,0,0"
                 ToolTip="Check this to upload the generated videos to TikTok."/>
             </StackPanel>
