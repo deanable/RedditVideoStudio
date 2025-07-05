@@ -208,12 +208,11 @@ namespace RedditVideoStudio.Infrastructure.Services
         public async Task<string> ConvertWavToMp3Async(string inputWavPath, string outputMp3Path, CancellationToken cancellationToken)
         {
             _logger.LogInformation("Converting '{Input}' to MP3 at '{Output}'.", inputWavPath, outputMp3Path);
-
             var args = $"-i \"{inputWavPath}\" -acodec libmp3lame -q:a 2 \"{outputMp3Path}\" -y";
 
             await RunFfmpegAsync(args, null, TimeSpan.Zero, cancellationToken);
-
-            _logger.LogInformation("Successfully converted WAV to MP3.", outputMp3Path);
+            // --- FIXED: Added placeholder for the argument ---
+            _logger.LogInformation("Successfully converted WAV to MP3: {OutputMp3Path}", outputMp3Path);
             return outputMp3Path;
         }
 

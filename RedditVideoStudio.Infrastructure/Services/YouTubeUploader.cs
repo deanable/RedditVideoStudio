@@ -64,7 +64,8 @@ namespace RedditVideoStudio.Infrastructure.Services
 
             if (_settings.YouTube.PrivacyStatus.Equals("private", StringComparison.OrdinalIgnoreCase) && scheduledPublishTimeUtc.HasValue)
             {
-                video.Status.PublishAt = scheduledPublishTimeUtc.Value.ToUniversalTime();
+                // --- FIXED: Used non-obsolete property ---
+                video.Status.PublishAtDateTimeOffset = scheduledPublishTimeUtc.Value.ToUniversalTime();
             }
 
             FileStream? fileStream = null;

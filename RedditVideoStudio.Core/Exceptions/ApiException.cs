@@ -8,6 +8,7 @@ namespace RedditVideoStudio.Core.Exceptions
     public class ApiException : Exception
     {
         public ApiException(string message) : base(message) { }
-        public ApiException(string message, Exception innerException) : base(message, innerException) { }
+        // MODIFIED: Exception is now nullable to align with .NET standards.
+        public ApiException(string message, Exception? innerException) : base(message, innerException) { }
     }
 }

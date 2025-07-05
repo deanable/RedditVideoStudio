@@ -368,7 +368,7 @@
             "ShowCmd" = "3:1"
             "IconIndex" = "3:0"
             "Transitive" = "11:FALSE"
-            "Target" = "8:"
+            "Target" = "8:_C5D8DFB2CB394D268898258EEDDE18C5"
             "Folder" = "8:_0FB242DEC26E480E98B35A993FC1B007"
             "WorkingFolder" = "8:_6E89C2D12B744891BCB48C9EEB8B65C0"
             "Icon" = "8:_3AC66FD87AF341A88C4AC6C3144E8B2E"
@@ -382,7 +382,7 @@
             "ShowCmd" = "3:1"
             "IconIndex" = "3:0"
             "Transitive" = "11:FALSE"
-            "Target" = "8:"
+            "Target" = "8:_C5D8DFB2CB394D268898258EEDDE18C5"
             "Folder" = "8:_1C4E1C5FEAE04A97A812A3EFA97AA7BB"
             "WorkingFolder" = "8:_6E89C2D12B744891BCB48C9EEB8B65C0"
             "Icon" = "8:_3AC66FD87AF341A88C4AC6C3144E8B2E"
@@ -455,7 +455,7 @@
                     "UseDynamicProperties" = "11:TRUE"
                     "IsDependency" = "11:FALSE"
                     "SourcePath" = "8:<VsdDialogDir>\\VsdAdminFinishedDlg.wid"
-                        "Properties"
+                    "Properties"
                         {
                             "BannerBitmap"
                             {
@@ -694,7 +694,7 @@
                     "UseDynamicProperties" = "11:TRUE"
                     "IsDependency" = "11:FALSE"
                     "SourcePath" = "8:<VsdDialogDir>\\VsdAdminWelcomeDlg.wid"
-                        "Properties"
+                    "Properties"
                         {
                             "BannerBitmap"
                             {
@@ -764,7 +764,7 @@
                     "UseDynamicProperties" = "11:TRUE"
                     "IsDependency" = "11:FALSE"
                     "SourcePath" = "8:<VsdDialogDir>\\VsdAdminConfirmDlg.wid"
-                        "Properties"
+                    "Properties"
                         {
                             "BannerBitmap"
                             {
@@ -895,7 +895,7 @@
             "OutputGroupCanonicalName" = "8:Built"
             "OutputProjectGuid" = "8:{17F35C13-8546-FFEA-83C1-39D649F5D48B}"
             "ShowKeyOutput" = "11:TRUE"
-                "ExcludeFilters"
+            "ExcludeFilters"
                 {
                 }
             }
@@ -923,7 +923,7 @@
             "OutputGroupCanonicalName" = "8:Built"
             "OutputProjectGuid" = "8:{D39A78A9-4F1F-413A-B746-7CFEE5BFDFCF}"
             "ShowKeyOutput" = "11:TRUE"
-                "ExcludeFilters"
+            "ExcludeFilters"
                 {
                 }
             }

@@ -2,7 +2,7 @@
 using Microsoft.Extensions.Logging;
 using RedditVideoStudio.Core.Exceptions;
 using RedditVideoStudio.Core.Interfaces;
-using RedditVideoStudio.Domain.Models; // Added for SpeechGenerationResult
+using RedditVideoStudio.Domain.Models;
 using System;
 using System.IO;
 using System.Threading;
@@ -18,19 +18,32 @@ namespace RedditVideoStudio.Infrastructure.Services
         private readonly TextToSpeechClient _client;
         private readonly ILogger<GoogleTextToSpeechService> _logger;
         private readonly IAppConfiguration _appConfig;
-        private readonly IAudioUtility _audioUtility; // Added dependency
+        private readonly IAudioUtility _audioUtility;
 
         public GoogleTextToSpeechService(IAppConfiguration appConfig, IAudioUtility audioUtility, ILogger<GoogleTextToSpeechService> logger)
         {
             _logger = logger;
             _appConfig = appConfig;
-            _audioUtility = audioUtility; // Added
+            _audioUtility = audioUtility;
             var keyPath = _appConfig.Settings.GoogleCloud.ServiceAccountKeyPath;
 
-            // Constructor logic for creating _client remains the same...
+            // --- FIXED: Added the client initialization logic ---
+            try
+            {
+                var clientBuilder = new TextToSpeechClientBuilder();
+                if (!string.IsNullOrWhiteSpace(keyPath) && File.Exists(keyPath))
+                {
+                    clientBuilder.CredentialsPath = keyPath;
+                }
+                _client = clientBuilder.Build();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create Google TextToSpeechClient. Ensure the service account key path is valid or environment variables are set.");
+                throw new AppConfigurationException("Failed to initialize Google TTS client.", ex);
+            }
         }
 
-        // CORRECTED: Method now returns SpeechGenerationResult
         public async Task<SpeechGenerationResult> GenerateSpeechAsync(string text, string outputPath, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(text))
@@ -56,7 +69,6 @@ namespace RedditVideoStudio.Infrastructure.Services
                     AudioEncoding = AudioEncoding.Mp3,
                     SpeakingRate = ttsSettings.SpeakingRate
                 };
-
                 var response = await _client.SynthesizeSpeechAsync(input, voice, audioConfig, cancellationToken);
 
                 var outputDirectory = Path.GetDirectoryName(outputPath);
@@ -68,10 +80,7 @@ namespace RedditVideoStudio.Infrastructure.Services
                 await File.WriteAllBytesAsync(outputPath, response.AudioContent.ToByteArray(), cancellationToken);
                 _logger.LogDebug("Successfully wrote Google TTS audio file to {Path}", outputPath);
 
-                // Get the accurate duration of the created MP3 file.
                 var duration = await _audioUtility.GetAudioDurationAsync(outputPath, cancellationToken);
-
-                // Return the result object with the path and accurate duration.
                 return new SpeechGenerationResult(outputPath, duration);
             }
             catch (Exception ex)
@@ -83,7 +92,6 @@ namespace RedditVideoStudio.Infrastructure.Services
 
         public string[] GetVoices()
         {
-            // Google provider doesn't support listing voices in this implementation.
             return Array.Empty<string>();
         }
     }
