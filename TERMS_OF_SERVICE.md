@@ -6,11 +6,11 @@ By using the RedditVideoStudio application ("the App"), you agree to be bound by
 
 ## 1. Description of Service
 
-[cite_start]RedditVideoStudio is a desktop application that allows users to create video content from Reddit posts and comments and upload them to various social media platforms[cite: 1941, 1947].
+RedditVideoStudio is a desktop application that allows users to create video content from Reddit posts and comments and upload them to various social media platforms.
 
 ## 2. User Responsibilities
 
-- **Content Rights and Ownership:** You are solely responsible for the content you create and upload using the App. You must ensure that you have the necessary rights and permissions for all content, including Reddit text, background videos, images, and audio. [cite_start]The App utilizes third-party services like Pexels for background visuals [cite: 1881-1882], and you must adhere to their respective licenses.
+- **Content Rights and Ownership:** You are solely responsible for the content you create and upload using the App. You must ensure that you have the necessary rights and permissions for all content, including Reddit text, background videos, images, and audio. The App utilizes third-party services like Pexels for background visuals, and you must adhere to their respective licenses.
 - **Compliance with Platform Policies:** When you upload content to third-party platforms (such as YouTube, TikTok, Facebook, etc.), you are subject to their specific Terms of Service, Community Guidelines, and Monetization Policies. RedditVideoStudio is not responsible for any content takedowns, channel strikes, or demonetization that may occur. It is your responsibility to ensure your generated videos comply with each platform's rules.
 - **Acceptable Use:** You agree not to use the App to create content that is unlawful, defamatory, harassing, hateful, or that infringes on the intellectual property rights of others.
 
