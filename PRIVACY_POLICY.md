@@ -8,10 +8,10 @@ This Privacy Policy describes how RedditVideoStudio ("the App") handles your inf
 
 RedditVideoStudio is a desktop application that processes data locally on your machine and interacts with third-party APIs on your behalf.
 
-- [cite_start]**Configuration Settings:** The App stores your settings, including API keys for services like Pexels and various Text-to-Speech providers, locally on your computer using the Windows Registry [cite: 637-648]. This information is not transmitted to us.
-- **Authentication Tokens:** When you connect your social media accounts (e.g., YouTube, TikTok), the App receives and stores OAuth 2.0 authentication tokens. [cite_start]These tokens are stored securely on your local machine, often using the platform's recommended storage methods (e.g., Google's `FileDataStore` for YouTube [cite: 797, 804-805]). These tokens are used solely to upload videos and manage content on your behalf as instructed by you within the App.
-- [cite_start]**Reddit Content:** The App fetches public data from Reddit, such as post titles, text, and comments, based on the subreddit you configure [cite: 618-621]. This data is processed locally to create video content.
-- [cite_start]**Usage Data and Logs:** The App generates local log files for debugging and troubleshooting purposes[cite: 1890]. These logs may contain information about application performance and errors but are not automatically transmitted to us.
+- **Configuration Settings:** The App stores your settings, including API keys for services like Pexels and various Text-to-Speech providers, locally on your computer using the Windows Registry. This information is not transmitted to us.
+- **Authentication Tokens:** When you connect your social media accounts (e.g., YouTube, TikTok), the App receives and stores OAuth 2.0 authentication tokens. These tokens are stored securely on your local machine, often using the platform's recommended storage methods (e.g., Google's `FileDataStore` for YouTube). These tokens are used solely to upload videos and manage content on your behalf as instructed by you within the App.
+- **Reddit Content:** The App fetches public data from Reddit, such as post titles, text, and comments, based on the subreddit you configure. This data is processed locally to create video content.
+- **Usage Data and Logs:** The App generates local log files for debugging and troubleshooting purposes. These logs may contain information about application performance and errors but are not automatically transmitted to us.
 
 ## 2. Data Storage and Security
 
