@@ -1,23 +1,22 @@
-﻿using Microsoft.Extensions.Logging;
-using RedditVideoStudio.Core.Exceptions;
-using RedditVideoStudio.Core.Interfaces;
-using RedditVideoStudio.Shared.Configuration;
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Drawing;
-using System.Net.Http;
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Web;
-using System.Windows.Forms;
-
-namespace RedditVideoStudio.Infrastructure.Services
+﻿namespace RedditVideoStudio.Infrastructure.Services
 {
+    using Microsoft.Extensions.Logging;
+    using RedditVideoStudio.Core.Exceptions;
+    using RedditVideoStudio.Core.Interfaces;
+    using RedditVideoStudio.Shared.Configuration;
+    using System;
+    using System.Collections.Generic;
+    using System.Diagnostics;
+    using System.Net;
+    using System.Net.Http;
+    using System.Security.Cryptography;
+    using System.Text;
+    using System.Text.Json;
+    using System.Text.Json.Serialization;
+    using System.Threading;
+    using System.Threading.Tasks;
+    using System.Web;
+
     public class TikTokAuthService
     {
         private readonly ILogger<TikTokAuthService> _logger;
@@ -36,37 +35,82 @@ namespace RedditVideoStudio.Infrastructure.Services
             string codeVerifier = GenerateCodeVerifier();
             string codeChallenge = GenerateCodeChallenge(codeVerifier);
             string state = Guid.NewGuid().ToString();
+            string redirectUri = "http://localhost:8912/callback/";
 
             var authUrl = "https://www.tiktok.com/v2/auth/authorize/" +
                           $"?client_key={_settings.TikTok.ClientKey}" +
                           $"&scope={_settings.TikTok.Scopes}" +
                           "&response_type=code" +
-                          $"&redirect_uri={HttpUtility.UrlEncode("http://localhost:8912/callback/")}" +
+                           $"&redirect_uri={HttpUtility.UrlEncode(redirectUri)}" +
                           $"&state={state}" +
                           $"&code_challenge={codeChallenge}" +
                           "&code_challenge_method=S256";
 
+            // ADDED: Log the full authorization URL for debugging
+            _logger.LogInformation("Opening browser for TikTok authorization. Full URL: {AuthUrl}", authUrl);
+
             Process.Start(new ProcessStartInfo(authUrl) { UseShellExecute = true });
 
-            string? callbackUrl = ShowUrlInputDialog();
-            if (string.IsNullOrWhiteSpace(callbackUrl))
-            {
-                throw new OperationCanceledException("TikTok authentication was canceled.");
-            }
-
-            var queryParams = HttpUtility.ParseQueryString(new Uri(callbackUrl).Query);
-            string? authCode = queryParams.Get("code");
-            string? incomingState = queryParams.Get("state");
-
-            if (string.IsNullOrEmpty(authCode) || incomingState != state)
-            {
-                throw new ApiException("TikTok authorization failed. State parameter mismatch indicates a possible CSRF attack.");
-            }
+            string authCode = await ListenForCallback(redirectUri, state, cancellationToken);
 
             _logger.LogInformation("Received authorization code, exchanging for access token...");
             return await ExchangeCodeForToken(authCode, codeVerifier, cancellationToken);
         }
 
+        private async Task<string> ListenForCallback(string redirectUri, string expectedState, CancellationToken cancellationToken)
+        {
+            try // ADDED: Try/catch block for listener errors
+            {
+                using var listener = new HttpListener();
+                listener.Prefixes.Add(redirectUri);
+                listener.Start();
+                _logger.LogInformation("HttpListener started. Waiting for authentication callback on {Uri}", redirectUri);
+
+                var context = await listener.GetContextAsync();
+                _logger.LogInformation("Request received by listener.");
+
+                var request = context.Request;
+                // ADDED: Log the full incoming request URL
+                _logger.LogDebug("Listener received request for URL: {RequestUrl}", request.Url?.ToString() ?? "null");
+
+                string? code = request.QueryString.Get("code");
+                string? incomingState = request.QueryString.Get("state");
+                string? error = request.QueryString.Get("error");
+                string? errorDescription = request.QueryString.Get("error_description");
+
+                // ADDED: Log received parameters
+                _logger.LogInformation("Received callback parameters. Code: '{Code}', State: '{State}', Error: '{Error}', ErrorDescription: '{ErrorDescription}'",
+                    code ?? "null", incomingState ?? "null", error ?? "null", errorDescription ?? "null");
+
+                var response = context.Response;
+                string responseString = "<html><body><h1>Authentication successful!</h1><p>You can close this browser window now.</p></body></html>";
+                var buffer = Encoding.UTF8.GetBytes(responseString);
+                response.ContentLength64 = buffer.Length;
+                var output = response.OutputStream;
+                await output.WriteAsync(buffer, 0, buffer.Length, cancellationToken);
+                output.Close();
+                listener.Stop();
+                _logger.LogInformation("Listener has stopped.");
+
+                if (!string.IsNullOrEmpty(error))
+                {
+                    throw new ApiException($"TikTok returned an error: {error} - {errorDescription}");
+                }
+
+                if (string.IsNullOrEmpty(code) || incomingState != expectedState)
+                {
+                    throw new ApiException("TikTok authorization failed. State parameter mismatch or no code received.");
+                }
+                return code;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "The local HTTP listener failed.");
+                throw;
+            }
+        }
+
+        // ... (rest of the file remains the same) ...
         private async Task<string> ExchangeCodeForToken(string authCode, string codeVerifier, CancellationToken cancellationToken)
         {
             var requestBody = new Dictionary<string, string>
@@ -78,17 +122,14 @@ namespace RedditVideoStudio.Infrastructure.Services
                 { "redirect_uri", "http://localhost:8912/callback/" },
                 { "code_verifier", codeVerifier }
             };
-
             using var request = new HttpRequestMessage(HttpMethod.Post, "https://open.tiktokapis.com/v2/oauth/token/");
             request.Content = new FormUrlEncodedContent(requestBody);
-
             try
             {
                 var response = await _httpClient.SendAsync(request, cancellationToken);
                 var responseString = await response.Content.ReadAsStringAsync(cancellationToken);
 
                 _logger.LogInformation("Raw TikTok token response: {Response}", responseString);
-
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorResponse = JsonSerializer.Deserialize<TikTokErrorResponse>(responseString);
@@ -111,29 +152,6 @@ namespace RedditVideoStudio.Infrastructure.Services
             }
         }
 
-        private string? ShowUrlInputDialog()
-        {
-            using var form = new Form
-            {
-                Text = "Paste Callback URL",
-                Size = new Size(500, 180),
-                StartPosition = FormStartPosition.CenterScreen,
-                FormBorderStyle = FormBorderStyle.FixedDialog,
-                TopMost = true
-            };
-
-            var label = new Label() { Left = 20, Top = 20, Width = 440, Text = "After authorizing in your browser, copy the full URL from the address bar (it will show an error page) and paste it below." };
-            var textBox = new TextBox() { Left = 20, Top = 60, Width = 440 };
-            var buttonOk = new Button() { Text = "OK", Left = 300, Width = 100, Top = 90, DialogResult = DialogResult.OK };
-            var buttonCancel = new Button() { Text = "Cancel", Left = 40, Width = 100, Top = 90, DialogResult = DialogResult.Cancel };
-
-            form.Controls.AddRange(new Control[] { label, textBox, buttonOk, buttonCancel });
-            form.AcceptButton = buttonOk;
-            form.CancelButton = buttonCancel;
-
-            return form.ShowDialog() == DialogResult.OK ? textBox.Text : null;
-        }
-
         private string GenerateCodeVerifier()
         {
             var randomBytes = new byte[32];
@@ -148,7 +166,7 @@ namespace RedditVideoStudio.Infrastructure.Services
         {
             using (var sha256 = SHA256.Create())
             {
-                var challengeBytes = sha256.ComputeHash(Encoding.ASCII.GetBytes(codeVerifier));
+                var challengeBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(codeVerifier));
                 return Convert.ToBase64String(challengeBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
             }
         }
