@@ -12,9 +12,6 @@ using Serilog;
 using System;
 using System.IO;
 using System.Windows;
-using RedditVideoStudio.Core.Interfaces; // ADDED
-using RedditVideoStudio.Infrastructure.Services; // ADDED
-
 
 namespace RedditVideoStudio.UI
 {
@@ -51,7 +48,7 @@ namespace RedditVideoStudio.UI
 
                     // Register Destination Services
                     services.AddSingleton<IVideoDestination, YouTubeDestination>();
-                    services.AddSingleton<IVideoDestination, TikTokDestination>(); // MODIFIED
+                    services.AddSingleton<IVideoDestination, TikTokDestination>();
                     services.AddSingleton<IVideoDestination, InstagramDestination>();
 
                     services.AddSingleton<ISettingsService, SettingsService>();
@@ -64,7 +61,11 @@ namespace RedditVideoStudio.UI
                     services.AddSingleton<IYouTubeServiceFactory, YouTubeServiceFactory>();
                     services.AddSingleton<ITempDirectoryFactory, TempDirectoryFactory>();
                     services.AddSingleton<ITikTokServiceFactory, TikTokServiceFactory>();
-                    services.AddSingleton<TikTokAuthService>();
+
+                    // CORRECTED: TikTokAuthService is now registered as the implementation
+                    // for the ITikTokAuthService interface.
+                    services.AddSingleton<ITikTokAuthService, TikTokAuthService>();
+
                     services.AddSingleton<GoogleTextToSpeechService>();
                     services.AddSingleton<AzureTextToSpeechService>();
                     services.AddSingleton<ElevenLabsTextToSpeechService>();
@@ -74,9 +75,7 @@ namespace RedditVideoStudio.UI
                     services.AddSingleton<IVideoComposer, VideoComposer>();
                     services.AddSingleton<IPublishingService, PublishingService>();
 
-                    // --- ADDED: Register the new FFmpeg downloader service ---
                     services.AddSingleton<IFfmpegDownloaderService, FfmpegDownloaderService>();
-
                     services.AddTransient<ITextToSpeechService>(serviceProvider =>
                     {
                         var configService = serviceProvider.GetRequiredService<IAppConfiguration>();
