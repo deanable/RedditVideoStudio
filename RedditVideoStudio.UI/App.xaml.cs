@@ -63,7 +63,7 @@ namespace RedditVideoStudio.UI
                     services.AddSingleton<ITikTokServiceFactory, TikTokServiceFactory>();
 
                     // CORRECTED: TikTokAuthService is now registered as the implementation
-                    // for the ITikTokAuthService interface.
+                    // for the ITikTokAuthService interface. This resolves the exception.
                     services.AddSingleton<ITikTokAuthService, TikTokAuthService>();
 
                     services.AddSingleton<GoogleTextToSpeechService>();
