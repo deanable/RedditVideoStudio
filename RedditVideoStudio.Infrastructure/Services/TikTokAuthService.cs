@@ -1,14 +1,11 @@
 ﻿// File: C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\Services\TikTokAuthService.cs
 
-using Google.Apis.Http;
 using Microsoft.Extensions.Logging;
 using RedditVideoStudio.Core.Exceptions;
 using RedditVideoStudio.Core.Interfaces;
 using RedditVideoStudio.Shared.Configuration;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security;
@@ -16,6 +13,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Linq;
+using System.Net;
 
 namespace RedditVideoStudio.Infrastructure.Services
 {
@@ -80,9 +79,12 @@ namespace RedditVideoStudio.Infrastructure.Services
         /// <param name="httpClientFactory">Factory to create HttpClient instances.</param>
         /// <param name="config">The application's configuration service to get TikTok settings.</param>
         /// <param name="logger">The logger for logging information and errors.</param>
-        public TikTokAuthService(IHttpClientFactory httpClientFactory, IAppConfiguration config, ILogger<TikTokAuthService> logger)
+        public TikTokAuthService(
+            // CORRECTED: Fully qualify the type to resolve the ambiguity.
+            System.Net.Http.IHttpClientFactory httpClientFactory,
+            IAppConfiguration config,
+            ILogger<TikTokAuthService> logger)
         {
-            // The CreateClient() extension method is now available due to the new package reference.
             _httpClient = httpClientFactory.CreateClient("TikTokApiClient");
             _logger = logger;
 
@@ -91,7 +93,6 @@ namespace RedditVideoStudio.Infrastructure.Services
             {
                 ClientKey = config.Settings.TikTok.ClientKey ?? throw new ArgumentNullException(nameof(config.Settings.TikTok.ClientKey)),
                 ClientSecret = config.Settings.TikTok.ClientSecret ?? throw new ArgumentNullException(nameof(config.Settings.TikTok.ClientSecret)),
-                // Correctly references the RedirectUri from the TikTokSettings class.
                 RedirectUri = config.Settings.TikTok.RedirectUri ?? throw new ArgumentNullException(nameof(config.Settings.TikTok.RedirectUri)),
                 Scopes = config.Settings.TikTok.Scopes
             };
