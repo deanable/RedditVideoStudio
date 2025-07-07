@@ -16,9 +16,13 @@ namespace RedditVideoStudio.UI
     /// </summary>
     public partial class SettingsWindow : Window
     {
+        // The main view model for the settings window.
         private readonly SettingsViewModel _viewModel;
+        // Service for loading and saving application settings.
         private readonly ISettingsService _settingsService;
+        // Service for FFmpeg operations, like getting video duration.
         private readonly IFfmpegService _ffmpegService;
+        // Service for getting available Windows TTS voices.
         private readonly WindowsTextToSpeechService _windowsTtsService;
 
         /// <summary>
@@ -31,18 +35,30 @@ namespace RedditVideoStudio.UI
             WindowsTextToSpeechService windowsTtsService)
         {
             InitializeComponent();
-
             _viewModel = viewModel;
             _settingsService = settingsService;
             _ffmpegService = ffmpegService;
             _windowsTtsService = windowsTtsService;
 
-            // Load existing settings into the ViewModel
+            // Load existing settings into the ViewModel.
             _viewModel.Settings = _settingsService.GetSettings();
 
-            // Populate the list of available Windows TTS voices
+            // ==============================================================================
+            // FIX: This new block synchronizes the loaded settings with the UI.
+            // It iterates through each destination view model and sets its IsEnabled property
+            // based on the value stored in the settings dictionary.
+            // ==============================================================================
+            foreach (var destVm in _viewModel.Destinations.Destinations)
+            {
+                // Look up the saved setting for the current destination.
+                // If a value isn't found in the dictionary, it defaults to false.
+                destVm.IsEnabled = _viewModel.Settings.EnabledDestinations.GetValueOrDefault(destVm.Name, false);
+            }
+
+            // Populate the list of available Windows TTS voices.
             _viewModel.Voices = _windowsTtsService.GetVoices().ToList();
 
+            // Set the DataContext for the window to the main view model.
             DataContext = _viewModel;
         }
 
@@ -51,13 +67,13 @@ namespace RedditVideoStudio.UI
         /// </summary>
         private void SaveAndClose_Click(object sender, RoutedEventArgs e)
         {
-            // First, update the settings dictionary for enabled destinations from the viewmodel states
+            // First, update the settings dictionary for enabled destinations from the viewmodel states.
             foreach (var destVm in _viewModel.Destinations.Destinations)
             {
                 _viewModel.Settings.EnabledDestinations[destVm.Name] = destVm.IsEnabled;
             }
 
-            // Now, save the updated settings object to the registry (or other persistence mechanism)
+            // Now, save the updated settings object.
             _settingsService.SaveSettings(_viewModel.Settings);
             DialogResult = true;
             Close();
@@ -154,7 +170,6 @@ namespace RedditVideoStudio.UI
                 try
                 {
                     var jsonContent = File.ReadAllText(openFileDialog.FileName);
-
                     // Parse the JSON to find the 'installed' object which contains credentials for desktop apps.
                     using var jsonDoc = JsonDocument.Parse(jsonContent);
                     if (jsonDoc.RootElement.TryGetProperty("installed", out var installedElement) &&
@@ -163,7 +178,6 @@ namespace RedditVideoStudio.UI
                     {
                         var clientId = clientIdElement.GetString();
                         var clientSecret = clientSecretElement.GetString();
-
                         if (!string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(clientSecret))
                         {
                             // To ensure the UI updates, we replace the Settings object with a new instance
@@ -174,7 +188,6 @@ namespace RedditVideoStudio.UI
 
                             // Re-assigning the property on the ViewModel will notify the UI to refresh.
                             _viewModel.Settings = updatedSettings;
-
                             MessageBox.Show("YouTube API credentials loaded successfully from file.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                         }
                         else
