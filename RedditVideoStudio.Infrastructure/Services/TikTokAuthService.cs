@@ -82,6 +82,7 @@ namespace RedditVideoStudio.Infrastructure.Services
         /// <param name="logger">The logger for logging information and errors.</param>
         public TikTokAuthService(IHttpClientFactory httpClientFactory, IAppConfiguration config, ILogger<TikTokAuthService> logger)
         {
+            // The CreateClient() extension method is now available due to the new package reference.
             _httpClient = httpClientFactory.CreateClient("TikTokApiClient");
             _logger = logger;
 
@@ -90,7 +91,8 @@ namespace RedditVideoStudio.Infrastructure.Services
             {
                 ClientKey = config.Settings.TikTok.ClientKey ?? throw new ArgumentNullException(nameof(config.Settings.TikTok.ClientKey)),
                 ClientSecret = config.Settings.TikTok.ClientSecret ?? throw new ArgumentNullException(nameof(config.Settings.TikTok.ClientSecret)),
-                RedirectUri = config.Settings.YouTube.RedirectUri, // Assuming a shared redirect URI for simplicity
+                // Correctly references the RedirectUri from the TikTokSettings class.
+                RedirectUri = config.Settings.TikTok.RedirectUri ?? throw new ArgumentNullException(nameof(config.Settings.TikTok.RedirectUri)),
                 Scopes = config.Settings.TikTok.Scopes
             };
         }
