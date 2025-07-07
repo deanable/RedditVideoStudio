@@ -11,7 +11,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security;
-// Required for PKCE implementation
+// Add using statements required for cryptography and text encoding for PKCE
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -21,7 +21,7 @@ using System.Threading.Tasks;
 
 namespace RedditVideoStudio.Infrastructure.Services
 {
-    // ... (Record definitions like TikTokApiConfig, TikTokTokenResponse, etc. remain the same) ...
+    // ... (Record definitions remain unchanged) ...
     public record TikTokApiConfig
     {
         public string ClientKey { get; init; } = string.Empty;
@@ -133,7 +133,6 @@ namespace RedditVideoStudio.Infrastructure.Services
             return await PostToTokenEndpointAsync(requestBody);
         }
 
-        // ... (The rest of the file remains the same) ...
         #region Unchanged Methods
 
         public async Task<TikTokTokenResponse> RefreshAccessTokenAsync(string refreshToken)
