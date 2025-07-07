@@ -57,7 +57,7 @@ namespace RedditVideoStudio.Infrastructure.Services
                 throw new AppConfigurationException(errorMessage);
             }
 
-            // CORRECTED: Added a check to ensure the file is not empty.
+            // CORRECTED: Added a check to ensure the file is not empty before parsing.
             var fileContent = await File.ReadAllTextAsync(clientSecretFilePath, cancellationToken);
             if (string.IsNullOrWhiteSpace(fileContent))
             {
@@ -68,7 +68,6 @@ namespace RedditVideoStudio.Infrastructure.Services
 
             try
             {
-                // We now pass the validated string content into the stream for parsing.
                 await using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(fileContent));
                 var clientSecrets = await GoogleClientSecrets.FromStreamAsync(stream, cancellationToken);
 
@@ -99,6 +98,8 @@ namespace RedditVideoStudio.Infrastructure.Services
                 throw new YouTubeApiException($"An unexpected error occurred during authentication. Please ensure '{ClientSecretFileName}' is valid and that you have added 'http://localhost' as a redirect URI in your Google Cloud project.", ex);
             }
         }
+
+        // ... (The rest of the file remains the same) ...
 
         public async Task SignOutAsync()
         {

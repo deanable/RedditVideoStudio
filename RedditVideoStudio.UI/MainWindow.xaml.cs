@@ -1,6 +1,4 @@
-﻿// C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.UI\MainWindow.xaml.cs
-
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RedditVideoStudio.Core.Exceptions;
 using RedditVideoStudio.Core.Interfaces;
@@ -19,7 +17,6 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 
-// --- FIXED: Added the namespace declaration ---
 namespace RedditVideoStudio.UI
 {
     /// <summary>
@@ -74,6 +71,9 @@ namespace RedditVideoStudio.UI
                 _logger.LogInformation("Starting application initialization...");
                 var progress = new Progress<string>(message => _logger.LogInformation(message));
                 await _ffmpegDownloader.EnsureFfmpegIsAvailableAsync(progress, CancellationToken.None);
+
+                // CORRECTED: The startup logic no longer calls AuthenticateAsync.
+                // It now safely checks for existing authentications and loads posts.
                 await LoadTopPostsAsync();
             }
             catch (Exception ex)
@@ -92,6 +92,7 @@ namespace RedditVideoStudio.UI
             var selectedPosts = RedditPostListBox.SelectedItems.Cast<RedditPostViewModel>()
                                                .Where(p => !p.IsAlreadyUploaded)
                                                .ToList();
+
             if (!selectedPosts.Any())
             {
                 MessageBox.Show("Please select at least one Reddit post that has not already been uploaded.", "No Selection", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -102,6 +103,7 @@ namespace RedditVideoStudio.UI
                 .Where(kvp => kvp.Value)
                 .Select(kvp => kvp.Key)
                 .ToList();
+
             if (!enabledDestinationNames.Any())
             {
                 MessageBox.Show("No destination platforms are enabled. Please enable at least one in Settings.", "No Destinations", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -115,6 +117,7 @@ namespace RedditVideoStudio.UI
                 GenerationProgressBar.Value = report.Percentage;
                 _logger.LogInformation("[{Percentage}%] {Message}", report.Percentage, report.Message);
             });
+
             try
             {
                 foreach (var postViewModel in selectedPosts)
@@ -151,23 +154,29 @@ namespace RedditVideoStudio.UI
                 _fetchedPosts.Clear();
                 var allDestinations = _serviceProvider.GetRequiredService<IEnumerable<IVideoDestination>>();
                 var authenticatedDestinations = allDestinations.Where(d => d.IsAuthenticated).ToList();
+
                 if (!authenticatedDestinations.Any())
                 {
-                    _logger.LogWarning("No authenticated platforms found. Prompting user to configure settings.");
-                    MessageBox.Show("No social media accounts are connected. Please go to Settings to connect at least one account before fetching posts.", "Authentication Required", MessageBoxButton.OK, MessageBoxImage.Information);
-                    return;
+                    _logger.LogWarning("No authenticated platforms found. User may need to configure settings.");
+                    MessageBox.Show("No social media accounts are connected. Please go to Settings > Destinations to connect an account.", "Authentication Required", MessageBoxButton.OK, MessageBoxImage.Information);
+                    // Do not return here, just show the message and proceed to fetch posts without checking for duplicates.
                 }
 
-                _logger.LogInformation("Authenticated platforms found: {Platforms}", string.Join(", ", authenticatedDestinations.Select(d => d.Name)));
                 var allUploadedTitles = new HashSet<string>();
-                foreach (var destination in authenticatedDestinations)
+                if (authenticatedDestinations.Any())
                 {
-                    var titles = await destination.GetUploadedVideoTitlesAsync(CancellationToken.None);
-                    allUploadedTitles.UnionWith(titles);
+                    _logger.LogInformation("Authenticated platforms found: {Platforms}", string.Join(", ", authenticatedDestinations.Select(d => d.Name)));
+                    foreach (var destination in authenticatedDestinations)
+                    {
+                        var titles = await destination.GetUploadedVideoTitlesAsync(CancellationToken.None);
+                        allUploadedTitles.UnionWith(titles);
+                    }
+                    _logger.LogInformation("Found {Count} unique video titles across all connected platforms.", allUploadedTitles.Count);
                 }
-                _logger.LogInformation("Found {Count} unique video titles across all connected platforms.", allUploadedTitles.Count);
+
                 _logger.LogInformation("Fetching top Reddit posts...");
                 var posts = await _redditService.FetchFullPostDataAsync(CancellationToken.None);
+
                 await Dispatcher.InvokeAsync(() =>
                 {
                     foreach (var post in posts)
@@ -213,6 +222,7 @@ namespace RedditVideoStudio.UI
             _logger.LogError(ex, "An error occurred: {ErrorMessage}", ex.Message);
             string title = "Error";
             string message = $"An unexpected error occurred:\n\n{ex.Message}";
+
             switch (ex)
             {
                 case AppConfigurationException configEx:
