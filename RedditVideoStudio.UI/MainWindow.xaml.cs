@@ -72,8 +72,8 @@ namespace RedditVideoStudio.UI
                 var progress = new Progress<string>(message => _logger.LogInformation(message));
                 await _ffmpegDownloader.EnsureFfmpegIsAvailableAsync(progress, CancellationToken.None);
 
-                // CORRECTED: The startup logic no longer calls AuthenticateAsync.
-                // It now safely checks for existing authentications and loads posts.
+                // CORRECTED: The incorrect loop that called AuthenticateAsync on startup has been removed.
+                // The application will now start and then safely load posts.
                 await LoadTopPostsAsync();
             }
             catch (Exception ex)
@@ -159,7 +159,6 @@ namespace RedditVideoStudio.UI
                 {
                     _logger.LogWarning("No authenticated platforms found. User may need to configure settings.");
                     MessageBox.Show("No social media accounts are connected. Please go to Settings > Destinations to connect an account.", "Authentication Required", MessageBoxButton.OK, MessageBoxImage.Information);
-                    // Do not return here, just show the message and proceed to fetch posts without checking for duplicates.
                 }
 
                 var allUploadedTitles = new HashSet<string>();
