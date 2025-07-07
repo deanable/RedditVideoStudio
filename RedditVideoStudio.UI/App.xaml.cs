@@ -68,13 +68,12 @@ namespace RedditVideoStudio.UI
                     services.AddSingleton<ElevenLabsTextToSpeechService>();
                     services.AddSingleton<WindowsTextToSpeechService>();
 
-                    // CORRECTED: Changed lifetimes from Transient to Singleton
-                    // to match the lifetime of the IVideoComposer that consumes them.
-                    services.AddSingleton<IStoryboardGenerator, StoryboardGenerator>();
-                    services.AddSingleton<IVideoSegmentGenerator, VideoSegmentGenerator>();
-
-                    services.AddSingleton<IVideoComposer, VideoComposer>();
-                    services.AddSingleton<IPublishingService, PublishingService>();
+                    // CORRECTED: The services that constitute a single "operation"
+                    // are now correctly registered as Transient.
+                    services.AddTransient<IStoryboardGenerator, StoryboardGenerator>();
+                    services.AddTransient<IVideoSegmentGenerator, VideoSegmentGenerator>();
+                    services.AddTransient<IVideoComposer, VideoComposer>();
+                    services.AddTransient<IPublishingService, PublishingService>();
 
                     services.AddSingleton<IFfmpegDownloaderService, FfmpegDownloaderService>();
                     services.AddTransient<ITextToSpeechService>(serviceProvider =>

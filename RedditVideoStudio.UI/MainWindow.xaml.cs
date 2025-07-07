@@ -28,17 +28,19 @@ namespace RedditVideoStudio.UI
         private readonly IServiceProvider _serviceProvider;
         private readonly IRedditService _redditService;
         private readonly IAppConfiguration _configService;
-        private readonly IPublishingService _publishingService;
         private readonly IFfmpegDownloaderService _ffmpegDownloader;
         private readonly ObservableCollection<RedditPostViewModel> _fetchedPosts = new();
         private CancellationTokenSource _cancellationTokenSource = new();
 
+        /// <summary>
+        /// Initializes a new instance of the MainWindow class.
+        /// Note that IPublishingService is NOT injected here to prevent DI lifetime conflicts.
+        /// </summary>
         public MainWindow(
              ILogger<MainWindow> logger,
              IServiceProvider serviceProvider,
              IRedditService redditService,
              IAppConfiguration configService,
-             IPublishingService publishingService,
              IFfmpegDownloaderService ffmpegDownloader)
         {
             InitializeComponent();
@@ -46,7 +48,6 @@ namespace RedditVideoStudio.UI
             _serviceProvider = serviceProvider;
             _redditService = redditService;
             _configService = configService;
-            _publishingService = publishingService;
             _ffmpegDownloader = ffmpegDownloader;
 
             RedditPostListBox.ItemsSource = _fetchedPosts;
@@ -57,12 +58,18 @@ namespace RedditVideoStudio.UI
             this.Loaded += MainWindow_Loaded;
         }
 
+        /// <summary>
+        /// Handles the Loaded event of the window to perform initial setup.
+        /// </summary>
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             this.Loaded -= MainWindow_Loaded;
             await InitializeApplicationAsync();
         }
 
+        /// <summary>
+        /// Performs asynchronous initialization tasks like checking for dependencies and loading initial data.
+        /// </summary>
         private async Task InitializeApplicationAsync()
         {
             MainGrid.IsEnabled = false;
@@ -71,9 +78,6 @@ namespace RedditVideoStudio.UI
                 _logger.LogInformation("Starting application initialization...");
                 var progress = new Progress<string>(message => _logger.LogInformation(message));
                 await _ffmpegDownloader.EnsureFfmpegIsAvailableAsync(progress, CancellationToken.None);
-
-                // CORRECTED: The incorrect loop that called AuthenticateAsync on startup has been removed.
-                // The application will now start and then safely load posts.
                 await LoadTopPostsAsync();
             }
             catch (Exception ex)
@@ -87,6 +91,9 @@ namespace RedditVideoStudio.UI
             }
         }
 
+        /// <summary>
+        /// Handles the click event for the main "Generate & Upload" button.
+        /// </summary>
         private async void GenerateVideo_Click(object sender, RoutedEventArgs e)
         {
             var selectedPosts = RedditPostListBox.SelectedItems.Cast<RedditPostViewModel>()
@@ -110,6 +117,10 @@ namespace RedditVideoStudio.UI
                 return;
             }
 
+            // Resolve the IPublishingService here, on-demand.
+            // This creates a fresh "transient" instance for this specific operation, solving the DI lifetime issue.
+            var publishingService = _serviceProvider.GetRequiredService<IPublishingService>();
+
             GenerationProgressBar.Value = 0;
             _cancellationTokenSource = new CancellationTokenSource();
             IProgress<ProgressReport> progress = new Progress<ProgressReport>(report =>
@@ -132,7 +143,7 @@ namespace RedditVideoStudio.UI
                         Subreddit = postViewModel.Subreddit ?? string.Empty,
                         ScheduledPublishTimeUtc = postViewModel.ScheduledPublishTimeUtc
                     };
-                    await _publishingService.PublishVideoAsync(postData, enabledDestinationNames, progress, _cancellationTokenSource.Token);
+                    await publishingService.PublishVideoAsync(postData, enabledDestinationNames, progress, _cancellationTokenSource.Token);
                     postViewModel.IsAlreadyUploaded = true;
                 }
                 MessageBox.Show("All publishing tasks completed!", "Done", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -147,6 +158,9 @@ namespace RedditVideoStudio.UI
             }
         }
 
+        /// <summary>
+        /// Fetches the latest posts from Reddit and updates the UI list.
+        /// </summary>
         private async Task LoadTopPostsAsync()
         {
             try
@@ -203,11 +217,17 @@ namespace RedditVideoStudio.UI
             }
         }
 
+        /// <summary>
+        /// Handles the click event for the "Refresh Posts" button.
+        /// </summary>
         private async void RefreshPosts_Click(object sender, RoutedEventArgs e)
         {
             await LoadTopPostsAsync();
         }
 
+        /// <summary>
+        /// Opens the settings window.
+        /// </summary>
         private void OpenSettings_Click(object sender, RoutedEventArgs e)
         {
             var settingsWindow = _serviceProvider.GetRequiredService<SettingsWindow>();
@@ -216,6 +236,9 @@ namespace RedditVideoStudio.UI
             _ = LoadTopPostsAsync();
         }
 
+        /// <summary>
+        /// A centralized handler to log exceptions and display them to the user.
+        /// </summary>
         private void HandleException(Exception ex)
         {
             _logger.LogError(ex, "An error occurred: {ErrorMessage}", ex.Message);
