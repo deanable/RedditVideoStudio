@@ -171,7 +171,8 @@ namespace RedditVideoStudio.Infrastructure.Services
             _logger.LogInformation("Creating TikTok upload service instance.");
             var tikTokUploader = _tikTokServiceFactory.Create(_accessToken);
 
-            await tikTokUploader.UploadVideoAsync(videoPath, videoDetails.Title, cancellationToken);
+            // CORRECTED: Pass the entire videoDetails object instead of just the title.
+            await tikTokUploader.UploadVideoAsync(videoPath, videoDetails, cancellationToken);
             _logger.LogInformation("Successfully initiated upload process for video '{Title}' to TikTok.", videoDetails.Title);
         }
     }
