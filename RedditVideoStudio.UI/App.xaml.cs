@@ -33,6 +33,7 @@ namespace RedditVideoStudio.UI
             }
             catch (Exception ex)
             {
+                // This is where the InvalidOperationException is being caught and logged.
                 MessageBox.Show($"A critical error occurred on startup: {ex.Message}", "Startup Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 Log.Fatal(ex, "Host initialization failed catastrophically.");
             }
@@ -46,7 +47,6 @@ namespace RedditVideoStudio.UI
                 {
                     services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(ApplicationAssemblyReference).Assembly));
 
-                    // Register Destination Services
                     services.AddSingleton<IVideoDestination, YouTubeDestination>();
                     services.AddSingleton<IVideoDestination, TikTokDestination>();
                     services.AddSingleton<IVideoDestination, InstagramDestination>();
@@ -61,17 +61,18 @@ namespace RedditVideoStudio.UI
                     services.AddSingleton<IYouTubeServiceFactory, YouTubeServiceFactory>();
                     services.AddSingleton<ITempDirectoryFactory, TempDirectoryFactory>();
                     services.AddSingleton<ITikTokServiceFactory, TikTokServiceFactory>();
-
-                    // CORRECTED: TikTokAuthService is now registered as the implementation
-                    // for the ITikTokAuthService interface. This resolves the exception.
                     services.AddSingleton<ITikTokAuthService, TikTokAuthService>();
 
                     services.AddSingleton<GoogleTextToSpeechService>();
                     services.AddSingleton<AzureTextToSpeechService>();
                     services.AddSingleton<ElevenLabsTextToSpeechService>();
                     services.AddSingleton<WindowsTextToSpeechService>();
-                    services.AddTransient<IStoryboardGenerator, StoryboardGenerator>();
-                    services.AddTransient<IVideoSegmentGenerator, VideoSegmentGenerator>();
+
+                    // CORRECTED: Changed lifetimes from Transient to Singleton
+                    // to match the lifetime of the IVideoComposer that consumes them.
+                    services.AddSingleton<IStoryboardGenerator, StoryboardGenerator>();
+                    services.AddSingleton<IVideoSegmentGenerator, VideoSegmentGenerator>();
+
                     services.AddSingleton<IVideoComposer, VideoComposer>();
                     services.AddSingleton<IPublishingService, PublishingService>();
 
