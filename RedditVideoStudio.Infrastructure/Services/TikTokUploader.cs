@@ -25,7 +25,6 @@
         public async Task UploadVideoAsync(string videoPath, string title, CancellationToken cancellationToken = default)
         {
             _logger.LogInformation("Initiating TikTok upload for '{Title}'.", title);
-
             var initRequestBody = new
             {
                 post_info = new { title = title },
@@ -35,14 +34,20 @@
             try
             {
                 // 1. Initialize the upload
+                // CORRECTED: Deserialize into a more robust DTO that includes the 'error' field.
                 var initResponse = await "https://open.tiktokapis.com/v2/post/publish/video/init/"
                     .WithOAuthBearerToken(_accessToken)
                     .PostJsonAsync(initRequestBody, cancellationToken: cancellationToken)
-                    .ReceiveJson<TikTokInitResponse>();
+                    .ReceiveJson<TikTokApiResponse<TikTokInitData>>();
 
-                if (initResponse?.Data?.UploadUrl == null)
+                // CORRECTED: More robust error checking.
+                // First, check for a non-"ok" error code from the API body.
+                // Then, ensure the UploadUrl is actually present.
+                if (initResponse?.Error?.Code != "ok" || string.IsNullOrWhiteSpace(initResponse?.Data?.UploadUrl))
                 {
-                    throw new ApiException("Failed to get upload URL from TikTok.");
+                    var errorMessage = $"Failed to get upload URL from TikTok. API returned error: '{initResponse?.Error?.Message}' (Code: {initResponse?.Error?.Code}, Log ID: {initResponse?.Error?.LogId})";
+                    _logger.LogError(errorMessage);
+                    throw new ApiException(errorMessage);
                 }
 
                 _logger.LogInformation("TikTok upload initialized. Uploading video file to the provided URL.");
@@ -70,18 +75,44 @@
             }
         }
 
-        private class TikTokInitResponse
+        // --- DTOs Revised for Robustness ---
+
+        /// <summary>
+        /// A generic wrapper for TikTok API responses, containing both data and error fields.
+        /// </summary>
+        private class TikTokApiResponse<T>
         {
             [JsonPropertyName("data")]
-            public TikTokInitData? Data { get; set; }
+            public T? Data { get; set; }
+
+            [JsonPropertyName("error")]
+            public TikTokErrorData? Error { get; set; }
         }
 
+        /// <summary>
+        /// Represents the data object from the /video/init/ response.
+        /// </summary>
         private class TikTokInitData
         {
             [JsonPropertyName("upload_url")]
             public string? UploadUrl { get; set; }
             [JsonPropertyName("publish_id")]
             public string? PublishId { get; set; }
+        }
+
+        /// <summary>
+        /// Represents the error object in a standard TikTok API response.
+        /// </summary>
+        private class TikTokErrorData
+        {
+            [JsonPropertyName("code")]
+            public string Code { get; init; } = string.Empty;
+
+            [JsonPropertyName("message")]
+            public string Message { get; init; } = string.Empty;
+
+            [JsonPropertyName("log_id")]
+            public string LogId { get; init; } = string.Empty;
         }
     }
 }
