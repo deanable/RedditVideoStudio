@@ -23,7 +23,6 @@ namespace RedditVideoStudio.Infrastructure.Services
     public class YouTubeDestination : IVideoDestination
     {
         private readonly ILogger<YouTubeDestination> _logger;
-        // --- FIX: Injected IAppConfiguration to access settings ---
         private readonly IAppConfiguration _configService;
         private UserCredential? _credential;
         private readonly FileDataStore _fileDataStore;
@@ -33,7 +32,6 @@ namespace RedditVideoStudio.Infrastructure.Services
         public YouTubeDestination(ILogger<YouTubeDestination> logger, IAppConfiguration configService)
         {
             _logger = logger;
-            // --- FIX: Store the injected configuration service ---
             _configService = configService;
             var dataStorePath = Path.Combine(AppContext.BaseDirectory, CredentialDataStoreKey);
 
@@ -47,7 +45,6 @@ namespace RedditVideoStudio.Infrastructure.Services
         }
 
         public string Name => "YouTube";
-
         public bool IsAuthenticated => _credential != null && !_credential.Token.IsStale;
 
         public async Task AuthenticateAsync(CancellationToken cancellationToken = default)
@@ -60,10 +57,21 @@ namespace RedditVideoStudio.Infrastructure.Services
                 throw new AppConfigurationException(errorMessage);
             }
 
+            // CORRECTED: Added a check to ensure the file is not empty.
+            var fileContent = await File.ReadAllTextAsync(clientSecretFilePath, cancellationToken);
+            if (string.IsNullOrWhiteSpace(fileContent))
+            {
+                var errorMessage = $"Authentication failed: The '{ClientSecretFileName}' file exists but is empty. Please paste the JSON content from your Google Cloud credentials into the file.";
+                _logger.LogError(errorMessage);
+                throw new AppConfigurationException(errorMessage);
+            }
+
             try
             {
-                await using var stream = new FileStream(clientSecretFilePath, FileMode.Open, FileAccess.Read);
+                // We now pass the validated string content into the stream for parsing.
+                await using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(fileContent));
                 var clientSecrets = await GoogleClientSecrets.FromStreamAsync(stream, cancellationToken);
+
                 var scopes = new[] {
                     YouTubeService.Scope.YoutubeUpload,
                     YouTubeService.Scope.YoutubeReadonly
@@ -130,12 +138,10 @@ namespace RedditVideoStudio.Infrastructure.Services
                 },
                 Status = new VideoStatus
                 {
-                    // --- FIX: Use the PrivacyStatus from settings instead of hardcoding "private" ---
                     PrivacyStatus = _configService.Settings.YouTube.PrivacyStatus
                 }
             };
 
-            // This logic was missing from your latest file but is required for scheduling private videos
             if (video.Status.PrivacyStatus.Equals("private", StringComparison.OrdinalIgnoreCase) && videoDetails.ScheduledPublishTime.HasValue)
             {
                 video.Status.PublishAtDateTimeOffset = videoDetails.ScheduledPublishTime.Value;
@@ -165,6 +171,7 @@ namespace RedditVideoStudio.Infrastructure.Services
                 await using var thumbStream = new FileStream(thumbnailPath, FileMode.Open);
                 var thumbRequest = youtubeService.Thumbnails.Set(videoId, thumbStream, "image/jpeg");
                 var thumbUploadStatus = await thumbRequest.UploadAsync(cancellationToken);
+
                 if (thumbUploadStatus.Status != UploadStatus.Completed)
                 {
                     _logger.LogError(thumbUploadStatus.Exception, "YouTube thumbnail upload failed.");
@@ -189,11 +196,13 @@ namespace RedditVideoStudio.Infrastructure.Services
                 HttpClientInitializer = _credential,
                 ApplicationName = "RedditVideoStudio"
             });
+
             var searchRequest = youtubeService.Search.List("snippet");
             searchRequest.ForMine = true;
             searchRequest.Type = "video";
             searchRequest.Q = $"\"{title}\""; // Exact title search
             searchRequest.MaxResults = 1;
+
             try
             {
                 var searchResponse = await searchRequest.ExecuteAsync(cancellationToken);
@@ -225,8 +234,10 @@ namespace RedditVideoStudio.Infrastructure.Services
                 HttpClientInitializer = _credential,
                 ApplicationName = "RedditVideoStudio"
             });
+
             string? nextPageToken = "";
             _logger.LogInformation("Fetching all uploaded video titles from YouTube...");
+
             while (nextPageToken != null)
             {
                 var searchRequest = youtubeService.Search.List("snippet");
@@ -234,6 +245,7 @@ namespace RedditVideoStudio.Infrastructure.Services
                 searchRequest.Type = "video";
                 searchRequest.MaxResults = 50; // Max allowed value
                 searchRequest.PageToken = nextPageToken;
+
                 var searchResponse = await searchRequest.ExecuteAsync(cancellationToken);
                 foreach (var searchResult in searchResponse.Items)
                 {
