@@ -18,20 +18,16 @@ namespace RedditVideoStudio.Infrastructure.Services
     public class TikTokDestination : IVideoDestination
     {
         private readonly ILogger<TikTokDestination> _logger;
-        // CORRECTED: Depends on the interface, not the concrete class.
         private readonly ITikTokAuthService _authService;
         private readonly ITikTokServiceFactory _tikTokServiceFactory;
         private readonly IAppConfiguration _config;
         private string? _accessToken;
-        // ADDED: Field to store the refresh token for future use.
         private string? _refreshToken;
 
         public TikTokDestination(
             ILogger<TikTokDestination> logger,
-            // CORRECTED: Injects the interface for better decoupling.
             ITikTokAuthService authService,
             ITikTokServiceFactory tikTokServiceFactory,
-            // ADDED: Injects configuration to get the Redirect URI.
             IAppConfiguration config)
         {
             _logger = logger;
@@ -41,13 +37,19 @@ namespace RedditVideoStudio.Infrastructure.Services
         }
 
         public string Name => "TikTok";
+
+        /// <summary>
+        /// Gets a value indicating whether the destination is currently authenticated.
+        /// This is determined by the presence of an access token.
+        /// </summary>
         public bool IsAuthenticated => !string.IsNullOrEmpty(_accessToken);
 
-        // CORRECTED: This method now properly orchestrates the entire OAuth flow.
         public async Task AuthenticateAsync(CancellationToken cancellationToken = default)
         {
             _logger.LogInformation("Starting TikTok authentication process.");
-            IsAuthenticated = false; // Ensure state is clean before starting.
+
+            // CORRECTED: The line 'IsAuthenticated = false;' was removed.
+            // The state is correctly reset by nullifying the tokens below.
             _accessToken = null;
             _refreshToken = null;
 
@@ -71,9 +73,9 @@ namespace RedditVideoStudio.Infrastructure.Services
                 // 5. Exchange the received authorization code for tokens.
                 var tokenResponse = await _authService.ExchangeCodeForTokensAsync(authCode, state, state);
 
-                // 6. Store the tokens.
+                // 6. Store the tokens. The IsAuthenticated property will now automatically become true.
                 _accessToken = tokenResponse.AccessToken;
-                _refreshToken = tokenResponse.RefreshToken; // Store refresh token
+                _refreshToken = tokenResponse.RefreshToken;
 
                 if (string.IsNullOrEmpty(_accessToken))
                 {
@@ -85,9 +87,9 @@ namespace RedditVideoStudio.Infrastructure.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred during TikTok authentication: {ErrorMessage}", ex.Message);
-                _accessToken = null; // Ensure we are not in a partially authenticated state.
+                _accessToken = null;
                 _refreshToken = null;
-                throw; // Re-throw the exception to be handled by the UI.
+                throw;
             }
         }
 
@@ -101,12 +103,10 @@ namespace RedditVideoStudio.Infrastructure.Services
                 listener.Start();
                 _logger.LogInformation("HttpListener started. Waiting for authentication callback on {Uri}", redirectUri);
 
-                // The GetContextAsync method can be cancelled.
                 var context = await listener.GetContextAsync().WaitAsync(cancellationToken);
                 var request = context.Request;
                 _logger.LogDebug("Listener received request for URL: {RequestUrl}", request.Url?.ToString() ?? "null");
 
-                // Respond to the browser immediately to close the loop.
                 string responseString = "<html><body><h1>Authentication successful!</h1><p>You can close this browser window now.</p></body></html>";
                 var buffer = Encoding.UTF8.GetBytes(responseString);
                 var response = context.Response;
@@ -114,7 +114,6 @@ namespace RedditVideoStudio.Infrastructure.Services
                 await response.OutputStream.WriteAsync(buffer, cancellationToken);
                 response.OutputStream.Close();
 
-                // Extract parameters from the callback URL.
                 var code = request.QueryString.Get("code");
                 var incomingState = request.QueryString.Get("state");
                 var error = request.QueryString.Get("error");
