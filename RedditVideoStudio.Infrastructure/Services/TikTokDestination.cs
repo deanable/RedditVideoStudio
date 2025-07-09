@@ -111,12 +111,13 @@ namespace RedditVideoStudio.Infrastructure.Services
             _logger.LogInformation("Received authorization code, exchanging for access token...");
 
             // --- START OF CORRECTION ---
-            // As discovered, the client_key must be a query parameter in the URL.
-            string tokenUrl = $"https://open.tiktokapis.com/v2/oauth/token/?client_key={tiktokSettings.ClientKey}";
+            // The token URL should be clean, without any query parameters.
+            string tokenUrl = "https://open.tiktokapis.com/v2/oauth/token/";
 
-            // The other parameters remain in the form-encoded body.
+            // The client_key must be added to the form-encoded body along with the other parameters.
             var tokenRequestBody = new Dictionary<string, string>
             {
+                { "client_key", tiktokSettings.ClientKey }, // Added this line
                 { "client_secret", tiktokSettings.ClientSecret },
                 { "code", authCode },
                 { "grant_type", "authorization_code" },
