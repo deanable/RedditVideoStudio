@@ -1,30 +1,30 @@
 ﻿// System using statements
-using System;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Diagnostics;
-using System.Web;
-using System.Security.Cryptography;
-using System.Text;
-using System.Collections.Generic;
-using System.Net;
-
+using Flurl.Http;
 // Third-party using statements
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
-using Flurl.Http;
-using SKIT.FlurlHttpClient.ByteDance.TikTokGlobal;
-using SKIT.FlurlHttpClient.ByteDance.TikTokGlobal.Models;
-
+using RedditVideoStudio.Core.Exceptions;
 // Application-specific using statements
 using RedditVideoStudio.Core.Interfaces;
 using RedditVideoStudio.Domain.Models;
-using RedditVideoStudio.Core.Exceptions;
-
+using SKIT.FlurlHttpClient.ByteDance.TikTokGlobal;
+using SKIT.FlurlHttpClient.ByteDance.TikTokGlobal.Models;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Web;
 // IMPORTANT: Add this using statement for the Windows Forms dialog
 using System.Windows.Forms;
-using System.Drawing;
 
 
 namespace RedditVideoStudio.Infrastructure.Services
@@ -35,6 +35,7 @@ namespace RedditVideoStudio.Infrastructure.Services
         private readonly IAppConfiguration _appConfig;
         private readonly string _tokenStorePath;
         private TikTokTokenData? _tokenData;
+        private static readonly HttpClient _httpClient = new HttpClient();
 
         private class TikTokApiTokenResponse
         {
@@ -109,21 +110,40 @@ namespace RedditVideoStudio.Infrastructure.Services
 
             _logger.LogInformation("Received authorization code, exchanging for access token...");
 
+            // --- START OF CORRECTION ---
+            // As discovered, the client_key must be a query parameter in the URL.
+            string tokenUrl = $"https://open.tiktokapis.com/v2/oauth/token/?client_key={tiktokSettings.ClientKey}";
+
+            // The other parameters remain in the form-encoded body.
             var tokenRequestBody = new Dictionary<string, string>
             {
-                { "client_key", tiktokSettings.ClientKey },
                 { "client_secret", tiktokSettings.ClientSecret },
                 { "code", authCode },
                 { "grant_type", "authorization_code" },
                 { "redirect_uri", redirectUrl },
                 { "code_verifier", codeVerifier }
             };
+            // --- END OF CORRECTION ---
 
             try
             {
-                var response = await "https://open.tiktokapis.com/v2/oauth/token/"
-                    .PostUrlEncodedAsync(tokenRequestBody, cancellationToken: cancellationToken)
-                    .ReceiveJson<TikTokApiTokenResponse>();
+                using var requestMessage = new HttpRequestMessage(HttpMethod.Post, tokenUrl)
+                {
+                    Content = new FormUrlEncodedContent(tokenRequestBody)
+                };
+
+                requestMessage.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                var httpResponse = await _httpClient.SendAsync(requestMessage, cancellationToken);
+                string responseBody = await httpResponse.Content.ReadAsStringAsync(cancellationToken);
+
+                if (!httpResponse.IsSuccessStatusCode)
+                {
+                    _logger.LogError("TikTok token exchange failed with status {StatusCode}. Response Body: {ErrorBody}", httpResponse.StatusCode, responseBody);
+                    throw new ApiException($"Failed to get TikTok access token. Server responded with an error: {responseBody}");
+                }
+
+                var response = JsonConvert.DeserializeObject<TikTokApiTokenResponse>(responseBody);
 
                 if (string.IsNullOrEmpty(response?.AccessToken))
                 {
@@ -139,11 +159,10 @@ namespace RedditVideoStudio.Infrastructure.Services
                 SaveToken();
                 _logger.LogInformation("Successfully authenticated with TikTok and saved token.");
             }
-            catch (FlurlHttpException ex)
+            catch (Exception ex) when (ex is not ApiException)
             {
-                var errorBody = await ex.GetResponseStringAsync();
-                _logger.LogError(ex, "TikTok token exchange failed with status {StatusCode}. Response Body: {ErrorBody}", ex.StatusCode, errorBody);
-                throw new ApiException($"Failed to get TikTok access token. Server responded with an error: {errorBody}", ex);
+                _logger.LogError(ex, "An unexpected error occurred during TikTok token exchange.");
+                throw new ApiException("An unexpected error occurred during the token exchange.", ex);
             }
         }
 
@@ -172,8 +191,6 @@ namespace RedditVideoStudio.Infrastructure.Services
                 SourceInfo = new PostPublishVideoInitRequest.Types.SourceInfo() { Source = "FILE_UPLOAD" }
             };
 
-            // This is an async method, but we are not awaiting it here.
-            // This is a fire-and-forget operation as per the business logic.
             _ = Task.Run(async () =>
             {
                 var initResponse = await client.ExecutePostPublishVideoInitAsync(initRequest, cancellationToken);
@@ -228,15 +245,14 @@ namespace RedditVideoStudio.Infrastructure.Services
         #region Private Helpers
         private async Task<HttpListenerContext> ListenForCallbackAsync(string redirectUrl, CancellationToken cancellationToken)
         {
-            using var listener = new HttpListener();
+            var listener = new HttpListener();
             listener.Prefixes.Add(redirectUrl);
             try
             {
                 listener.Start();
-
                 var context = await listener.GetContextAsync().WaitAsync(cancellationToken);
 
-                using var response = context.Response;
+                var response = context.Response;
                 const string responseString = "<html><body style='font-family: sans-serif;'><h1>Authentication successful!</h1><p>You can close this browser window now.</p></body></html>";
                 byte[] buffer = Encoding.UTF8.GetBytes(responseString);
                 response.ContentLength64 = buffer.Length;
@@ -273,9 +289,11 @@ namespace RedditVideoStudio.Infrastructure.Services
 
         private static string GenerateCodeVerifier()
         {
-            return Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            var randomBytes = RandomNumberGenerator.GetBytes(32);
+            return Convert.ToBase64String(randomBytes)
                 .Replace('+', '-')
-                .Replace('/', '_');
+                .Replace('/', '_')
+                .TrimEnd('=');
         }
 
         private static string GenerateCodeChallenge(string codeVerifier)
@@ -283,7 +301,8 @@ namespace RedditVideoStudio.Infrastructure.Services
             var challengeBytes = SHA256.HashData(Encoding.ASCII.GetBytes(codeVerifier));
             return Convert.ToBase64String(challengeBytes)
                 .Replace('+', '-')
-                .Replace('/', '_');
+                .Replace('/', '_')
+                .TrimEnd('=');
         }
         #endregion
     }
