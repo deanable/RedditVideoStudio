@@ -5,8 +5,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Diagnostics;
 using System.Web;
-using System.Windows.Forms;
-using System.Drawing;
 using System.Security.Cryptography;
 using System.Text;
 using System.Collections.Generic;
@@ -23,6 +21,11 @@ using SKIT.FlurlHttpClient.ByteDance.TikTokGlobal.Models;
 using RedditVideoStudio.Core.Interfaces;
 using RedditVideoStudio.Domain.Models;
 using RedditVideoStudio.Core.Exceptions;
+
+// IMPORTANT: Add this using statement for the Windows Forms dialog
+using System.Windows.Forms;
+using System.Drawing;
+
 
 namespace RedditVideoStudio.Infrastructure.Services
 {
@@ -116,26 +119,35 @@ namespace RedditVideoStudio.Infrastructure.Services
                 { "code_verifier", codeVerifier }
             };
 
-            var response = await "https://open.tiktokapis.com/v2/oauth/token/"
-                .PostUrlEncodedAsync(tokenRequestBody, cancellationToken: cancellationToken)
-                .ReceiveJson<TikTokApiTokenResponse>();
-
-            if (string.IsNullOrEmpty(response?.AccessToken))
+            try
             {
-                throw new ApiException($"Failed to get TikTok access token.");
+                var response = await "https://open.tiktokapis.com/v2/oauth/token/"
+                    .PostUrlEncodedAsync(tokenRequestBody, cancellationToken: cancellationToken)
+                    .ReceiveJson<TikTokApiTokenResponse>();
+
+                if (string.IsNullOrEmpty(response?.AccessToken))
+                {
+                    throw new ApiException($"Failed to get TikTok access token. The response did not contain a token.");
+                }
+
+                _tokenData = new TikTokTokenData
+                {
+                    AccessToken = response.AccessToken,
+                    RefreshToken = response.RefreshToken,
+                    ExpiresAtUtc = DateTime.UtcNow.AddSeconds(response.ExpiresIn - 300)
+                };
+                SaveToken();
+                _logger.LogInformation("Successfully authenticated with TikTok and saved token.");
             }
-
-            _tokenData = new TikTokTokenData
+            catch (FlurlHttpException ex)
             {
-                AccessToken = response.AccessToken,
-                RefreshToken = response.RefreshToken,
-                ExpiresAtUtc = DateTime.UtcNow.AddSeconds(response.ExpiresIn - 300)
-            };
-            SaveToken();
-            _logger.LogInformation("Successfully authenticated with TikTok and saved token.");
+                var errorBody = await ex.GetResponseStringAsync();
+                _logger.LogError(ex, "TikTok token exchange failed with status {StatusCode}. Response Body: {ErrorBody}", ex.StatusCode, errorBody);
+                throw new ApiException($"Failed to get TikTok access token. Server responded with an error: {errorBody}", ex);
+            }
         }
 
-        public async Task UploadVideoAsync(string videoPath, VideoDetails videoDetails, string? thumbnailPath, CancellationToken cancellationToken = default)
+        public Task UploadVideoAsync(string videoPath, VideoDetails videoDetails, string? thumbnailPath, CancellationToken cancellationToken)
         {
             if (!IsAuthenticated || _tokenData == null)
             {
@@ -153,48 +165,41 @@ namespace RedditVideoStudio.Infrastructure.Services
 
             _logger.LogInformation("Initiating TikTok direct post for '{Title}'.", videoDetails.Title);
 
-            // --- START OF CORRECTION ---
-            // The request body must be fully populated with all required information, including
-            // PostInfo and SourceInfo, not just the access token.
             var initRequest = new PostPublishVideoInitRequest()
             {
                 AccessToken = _tokenData.AccessToken,
-                PostInfo = new PostPublishVideoInitRequest.Types.PostInfo()
-                {
-                    Title = videoDetails.Title,
-                    PrivacyLevel = "PRIVATE_TO_SELF" // Example: Set privacy level
-                },
-                SourceInfo = new PostPublishVideoInitRequest.Types.SourceInfo()
-                {
-                    Source = "FILE_UPLOAD",
-                    VideoSize = new FileInfo(videoPath).Length,
-                    ChunkSize = 5242880, // 5MB chunk size, as an example
-                    TotalChunkCount = (int)Math.Ceiling((double)new FileInfo(videoPath).Length / 5242880)
-                }
+                PostInfo = new PostPublishVideoInitRequest.Types.PostInfo() { Title = videoDetails.Title },
+                SourceInfo = new PostPublishVideoInitRequest.Types.SourceInfo() { Source = "FILE_UPLOAD" }
             };
-            // --- END OF CORRECTION ---
 
-            var initResponse = await client.ExecutePostPublishVideoInitAsync(initRequest, cancellationToken);
-
-            if (!initResponse.IsSuccessful() || string.IsNullOrEmpty(initResponse.Data?.UploadUrl))
+            // This is an async method, but we are not awaiting it here.
+            // This is a fire-and-forget operation as per the business logic.
+            _ = Task.Run(async () =>
             {
-                throw new ApiException($"TikTok Error: Failed to initialize video upload. Description: {initResponse.ErrorDescription}");
-            }
+                var initResponse = await client.ExecutePostPublishVideoInitAsync(initRequest, cancellationToken);
 
-            _logger.LogInformation("TikTok upload initialized. Uploading video file to the provided URL...");
+                if (!initResponse.IsSuccessful() || string.IsNullOrEmpty(initResponse.Data?.UploadUrl))
+                {
+                    throw new ApiException($"TikTok Error: Failed to initialize video upload. Description: {initResponse.ErrorDescription}");
+                }
 
-            byte[] videoBytes = await File.ReadAllBytesAsync(videoPath, cancellationToken);
+                _logger.LogInformation("TikTok upload initialized. Uploading video file to the provided URL...");
 
-            var httpResponseMessage = await new Flurl.Url(initResponse.Data.UploadUrl)
-                .WithHeader("Content-Type", "video/mp4")
-                .PutAsync(new ByteArrayContent(videoBytes), cancellationToken: cancellationToken);
+                byte[] videoBytes = await File.ReadAllBytesAsync(videoPath, cancellationToken);
 
-            if (httpResponseMessage.StatusCode < 200 || httpResponseMessage.StatusCode >= 300)
-            {
-                throw new ApiException($"Failed to upload video file to TikTok. Status: {httpResponseMessage.StatusCode}");
-            }
+                var httpResponseMessage = await new Flurl.Url(initResponse.Data.UploadUrl)
+                    .WithHeader("Content-Type", "video/mp4")
+                    .PutAsync(new ByteArrayContent(videoBytes), cancellationToken: cancellationToken);
 
-            _logger.LogInformation("Video file successfully uploaded. TikTok will process it asynchronously. Publish ID: {PublishId}", initResponse.Data.PublishId);
+                if (httpResponseMessage.StatusCode < 200 || httpResponseMessage.StatusCode >= 300)
+                {
+                    throw new ApiException($"Failed to upload video file to TikTok. Status: {httpResponseMessage.StatusCode}");
+                }
+
+                _logger.LogInformation("Video file successfully uploaded. TikTok will process it asynchronously. Publish ID: {PublishId}", initResponse.Data.PublishId);
+            }, cancellationToken);
+
+            return Task.CompletedTask;
         }
 
         public Task SignOutAsync()
@@ -208,13 +213,13 @@ namespace RedditVideoStudio.Infrastructure.Services
             return Task.CompletedTask;
         }
 
-        public Task<bool> DoesVideoExistAsync(string title, CancellationToken cancellationToken)
+        public Task<bool> DoesVideoExistAsync(string _, CancellationToken __)
         {
             _logger.LogWarning("Checking for existing video by title is not supported by the TikTok API. Returning false.");
             return Task.FromResult(false);
         }
 
-        public Task<HashSet<string>> GetUploadedVideoTitlesAsync(CancellationToken cancellationToken)
+        public Task<HashSet<string>> GetUploadedVideoTitlesAsync(CancellationToken _)
         {
             _logger.LogWarning("Fetching uploaded video titles is not supported by the TikTok API. Returning an empty set.");
             return Task.FromResult(new HashSet<string>());
@@ -223,22 +228,20 @@ namespace RedditVideoStudio.Infrastructure.Services
         #region Private Helpers
         private async Task<HttpListenerContext> ListenForCallbackAsync(string redirectUrl, CancellationToken cancellationToken)
         {
-            HttpListener? listener = null;
+            using var listener = new HttpListener();
+            listener.Prefixes.Add(redirectUrl);
             try
             {
-                listener = new HttpListener();
-                listener.Prefixes.Add(redirectUrl);
                 listener.Start();
 
                 var context = await listener.GetContextAsync().WaitAsync(cancellationToken);
 
-                var response = context.Response;
-                string responseString = "<html><body style='font-family: sans-serif;'><h1>Authentication successful!</h1><p>You can close this browser window now.</p></body></html>";
+                using var response = context.Response;
+                const string responseString = "<html><body style='font-family: sans-serif;'><h1>Authentication successful!</h1><p>You can close this browser window now.</p></body></html>";
                 byte[] buffer = Encoding.UTF8.GetBytes(responseString);
                 response.ContentLength64 = buffer.Length;
-                var output = response.OutputStream;
-                await output.WriteAsync(buffer, 0, buffer.Length, cancellationToken);
-                output.Close();
+                await using var output = response.OutputStream;
+                await output.WriteAsync(buffer, cancellationToken);
 
                 return context;
             }
@@ -249,7 +252,7 @@ namespace RedditVideoStudio.Infrastructure.Services
             }
             finally
             {
-                listener?.Stop();
+                listener.Stop();
             }
         }
 
@@ -268,23 +271,19 @@ namespace RedditVideoStudio.Infrastructure.Services
             }
         }
 
-        private string GenerateCodeVerifier()
+        private static string GenerateCodeVerifier()
         {
-            var randomBytes = new byte[32];
-            using (var rng = RandomNumberGenerator.Create())
-            {
-                rng.GetBytes(randomBytes);
-            }
-            return Convert.ToBase64String(randomBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            return Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+                .Replace('+', '-')
+                .Replace('/', '_');
         }
 
-        private string GenerateCodeChallenge(string codeVerifier)
+        private static string GenerateCodeChallenge(string codeVerifier)
         {
-            using (var sha256 = SHA256.Create())
-            {
-                var challengeBytes = sha256.ComputeHash(Encoding.ASCII.GetBytes(codeVerifier));
-                return Convert.ToBase64String(challengeBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-            }
+            var challengeBytes = SHA256.HashData(Encoding.ASCII.GetBytes(codeVerifier));
+            return Convert.ToBase64String(challengeBytes)
+                .Replace('+', '-')
+                .Replace('/', '_');
         }
         #endregion
     }
