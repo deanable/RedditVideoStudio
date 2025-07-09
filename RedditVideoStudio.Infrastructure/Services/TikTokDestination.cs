@@ -1,179 +1,298 @@
-﻿// File: C:\Users\Dean Kruger\source\repos\RedditVideoStudio\RedditVideoStudio.Infrastructure\Services\TikTokDestination.cs
-
-using Microsoft.Extensions.Logging;
-using RedditVideoStudio.Core.Exceptions;
-using RedditVideoStudio.Core.Interfaces;
-using RedditVideoStudio.Domain.Models;
+﻿// System using statements
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Net;
-using System.Text;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Diagnostics;
 using System.Web;
+using System.Security.Cryptography;
+using System.Text;
+using System.Collections.Generic;
+using System.Net; // Added for HttpListener
+
+// Third-party using statements
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
+using Flurl.Http;
+using SKIT.FlurlHttpClient.ByteDance.TikTokGlobal;
+using SKIT.FlurlHttpClient.ByteDance.TikTokGlobal.Models;
+
+// Application-specific using statements
+using RedditVideoStudio.Core.Interfaces;
+using RedditVideoStudio.Domain.Models;
+using RedditVideoStudio.Core.Exceptions;
 
 namespace RedditVideoStudio.Infrastructure.Services
 {
+    /// <summary>
+    /// Implements the IVideoDestination for TikTok, using the TikTok Global v2 SDK.
+    /// </summary>
     public class TikTokDestination : IVideoDestination
     {
         private readonly ILogger<TikTokDestination> _logger;
-        private readonly ITikTokAuthService _authService;
-        private readonly ITikTokServiceFactory _tikTokServiceFactory;
-        private readonly IAppConfiguration _config;
-        private string? _accessToken;
-        private string? _refreshToken;
+        private readonly IAppConfiguration _appConfig;
+        private readonly string _tokenStorePath;
+        private TikTokTokenData? _tokenData;
 
-        public TikTokDestination(
-            ILogger<TikTokDestination> logger,
-            ITikTokAuthService authService,
-            ITikTokServiceFactory tikTokServiceFactory,
-            IAppConfiguration config)
+        // Private class for deserializing the token response
+        private class TikTokApiTokenResponse
+        {
+            [JsonProperty("access_token")]
+            public string AccessToken { get; set; } = string.Empty;
+
+            [JsonProperty("refresh_token")]
+            public string RefreshToken { get; set; } = string.Empty;
+
+            [JsonProperty("expires_in")]
+            public int ExpiresIn { get; set; }
+        }
+
+        // Private class for storing token data persistently
+        private class TikTokTokenData
+        {
+            public string AccessToken { get; set; } = string.Empty;
+            public string RefreshToken { get; set; } = string.Empty;
+            public DateTime ExpiresAtUtc { get; set; }
+        }
+
+        public TikTokDestination(ILogger<TikTokDestination> logger, IAppConfiguration appConfig)
         {
             _logger = logger;
-            _authService = authService;
-            _tikTokServiceFactory = tikTokServiceFactory;
-            _config = config;
+            _appConfig = appConfig;
+            _tokenStorePath = Path.Combine(AppContext.BaseDirectory, "TikTok.Api.Auth.Store", "tiktok-token.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(_tokenStorePath)!);
+            LoadToken();
         }
 
         public string Name => "TikTok";
 
-        /// <summary>
-        /// Gets a value indicating whether the destination is currently authenticated.
-        /// This is determined by the presence of an access token.
-        /// </summary>
-        public bool IsAuthenticated => !string.IsNullOrEmpty(_accessToken);
+        public bool IsAuthenticated => _tokenData != null && _tokenData.ExpiresAtUtc > DateTime.UtcNow;
 
         public async Task AuthenticateAsync(CancellationToken cancellationToken = default)
         {
-            _logger.LogInformation("Starting TikTok authentication process.");
-
-            // CORRECTED: The line 'IsAuthenticated = false;' was removed.
-            // The state is correctly reset by nullifying the tokens below.
-            _accessToken = null;
-            _refreshToken = null;
-
-            // 1. Generate a unique state parameter for CSRF protection.
-            var state = Guid.NewGuid().ToString();
-            var redirectUri = _config.Settings.TikTok.RedirectUri;
-
-            // 2. Get the authorization URL from the auth service.
-            var authUrl = _authService.GetAuthorizationUrl(state);
-
-            try
+            var tiktokSettings = _appConfig.Settings.TikTok;
+            if (string.IsNullOrEmpty(tiktokSettings.ClientKey) || string.IsNullOrEmpty(tiktokSettings.ClientSecret))
             {
-                // 3. Open the URL in the user's default browser.
-                Process.Start(new ProcessStartInfo(authUrl) { UseShellExecute = true });
-                _logger.LogInformation("Opened browser for user authentication.");
-
-                // 4. Listen for the callback from TikTok's servers.
-                var authCode = await ListenForCallbackAsync(redirectUri, state, cancellationToken);
-                _logger.LogInformation("Received authorization code, exchanging for access token...");
-
-                // 5. Exchange the received authorization code for tokens.
-                var tokenResponse = await _authService.ExchangeCodeForTokensAsync(authCode, state, state);
-
-                // 6. Store the tokens. The IsAuthenticated property will now automatically become true.
-                _accessToken = tokenResponse.AccessToken;
-                _refreshToken = tokenResponse.RefreshToken;
-
-                if (string.IsNullOrEmpty(_accessToken))
-                {
-                    throw new ApiException("Authentication with TikTok failed, access token was not received.");
-                }
-
-                _logger.LogInformation("Successfully authenticated with TikTok.");
+                throw new AppConfigurationException("TikTok Client Key or Client Secret is not configured in settings.");
             }
-            catch (Exception ex)
+
+            string state = Guid.NewGuid().ToString();
+            string codeVerifier = GenerateCodeVerifier();
+            string codeChallenge = GenerateCodeChallenge(codeVerifier);
+            string redirectUrl = "http://localhost:8912/callback/";
+
+            var authUrl = "https://www.tiktok.com/v2/auth/authorize/" +
+                          $"?client_key={tiktokSettings.ClientKey}" +
+                          $"&scope={tiktokSettings.Scopes}" +
+                          "&response_type=code" +
+                          $"&redirect_uri={HttpUtility.UrlEncode(redirectUrl)}" +
+                          $"&state={state}" +
+                          $"&code_challenge={codeChallenge}" +
+                          "&code_challenge_method=S256";
+
+            // --- START OF CORRECTION: Automated Listener Flow ---
+
+            // Start the local listener before opening the browser
+            Task<HttpListenerContext> listenerContextTask = ListenForCallbackAsync(redirectUrl, cancellationToken);
+            _logger.LogInformation("HTTP listener started at {Url}. Opening browser for user authentication...", redirectUrl);
+
+            Process.Start(new ProcessStartInfo(authUrl) { UseShellExecute = true });
+
+            // Wait for the browser to redirect back to our listener
+            HttpListenerContext context = await listenerContextTask;
+            _logger.LogInformation("Callback received from browser.");
+
+            // Extract the query parameters from the callback URL
+            var queryParams = context.Request.QueryString;
+            string? authCode = queryParams.Get("code");
+            string? incomingState = queryParams.Get("state");
+
+            // --- END OF CORRECTION ---
+
+            if (string.IsNullOrEmpty(authCode) || incomingState != state)
             {
-                _logger.LogError(ex, "An error occurred during TikTok authentication: {ErrorMessage}", ex.Message);
-                _accessToken = null;
-                _refreshToken = null;
-                throw;
+                throw new ApiException("TikTok authorization failed. State mismatch or missing code.");
             }
+
+            _logger.LogInformation("Received authorization code, exchanging for access token...");
+
+            var tokenRequestBody = new Dictionary<string, string>
+            {
+                { "client_key", tiktokSettings.ClientKey },
+                { "client_secret", tiktokSettings.ClientSecret },
+                { "code", authCode },
+                { "grant_type", "authorization_code" },
+                { "redirect_uri", redirectUrl },
+                { "code_verifier", codeVerifier }
+            };
+
+            var response = await "https://open.tiktokapis.com/v2/oauth/token/"
+                .PostUrlEncodedAsync(tokenRequestBody, cancellationToken: cancellationToken)
+                .ReceiveJson<TikTokApiTokenResponse>();
+
+            if (string.IsNullOrEmpty(response?.AccessToken))
+            {
+                throw new ApiException($"Failed to get TikTok access token.");
+            }
+
+            _tokenData = new TikTokTokenData
+            {
+                AccessToken = response.AccessToken,
+                RefreshToken = response.RefreshToken,
+                ExpiresAtUtc = DateTime.UtcNow.AddSeconds(response.ExpiresIn - 300)
+            };
+            SaveToken();
+            _logger.LogInformation("Successfully authenticated with TikTok and saved token.");
         }
 
-        private async Task<string> ListenForCallbackAsync(string redirectUri, string expectedState, CancellationToken cancellationToken)
+        // Other methods like UploadVideoAsync, SignOutAsync remain the same...
+        public async Task UploadVideoAsync(string videoPath, VideoDetails videoDetails, string? thumbnailPath, CancellationToken cancellationToken = default)
         {
-            using var listener = new HttpListener();
-            listener.Prefixes.Add(redirectUri);
-
-            try
+            if (!IsAuthenticated || _tokenData == null)
             {
-                listener.Start();
-                _logger.LogInformation("HttpListener started. Waiting for authentication callback on {Uri}", redirectUri);
-
-                var context = await listener.GetContextAsync().WaitAsync(cancellationToken);
-                var request = context.Request;
-                _logger.LogDebug("Listener received request for URL: {RequestUrl}", request.Url?.ToString() ?? "null");
-
-                string responseString = "<html><body><h1>Authentication successful!</h1><p>You can close this browser window now.</p></body></html>";
-                var buffer = Encoding.UTF8.GetBytes(responseString);
-                var response = context.Response;
-                response.ContentLength64 = buffer.Length;
-                await response.OutputStream.WriteAsync(buffer, cancellationToken);
-                response.OutputStream.Close();
-
-                var code = request.QueryString.Get("code");
-                var incomingState = request.QueryString.Get("state");
-                var error = request.QueryString.Get("error");
-                var errorDescription = request.QueryString.Get("error_description");
-
-                _logger.LogInformation("Received callback parameters. Code: '{Code}', State: '{State}'", code ?? "null", incomingState ?? "null");
-
-                if (!string.IsNullOrEmpty(error))
-                {
-                    throw new ApiException($"TikTok returned an error: {error} - {errorDescription}");
-                }
-
-                if (string.IsNullOrEmpty(code) || incomingState != expectedState)
-                {
-                    throw new ApiException("TikTok authorization failed. State mismatch or no code received.");
-                }
-
-                return code;
+                throw new InvalidOperationException("Not authenticated with TikTok. Please authenticate first.");
             }
-            finally
+
+            var tiktokSettings = _appConfig.Settings.TikTok;
+            if (string.IsNullOrEmpty(tiktokSettings.ClientKey) || string.IsNullOrEmpty(tiktokSettings.ClientSecret))
             {
-                listener.Stop();
-                _logger.LogInformation("HttpListener has stopped.");
+                throw new AppConfigurationException("TikTok Client Key or Client Secret is not configured in settings.");
             }
-        }
 
+            var options = new TikTokV2ClientOptions { ClientKey = tiktokSettings.ClientKey, ClientSecret = tiktokSettings.ClientSecret };
+            var client = new TikTokV2Client(options);
 
-        public Task<bool> DoesVideoExistAsync(string title, CancellationToken cancellationToken = default)
-        {
-            _logger.LogWarning("Checking if a video exists on TikTok is not yet implemented.");
-            return Task.FromResult(false);
-        }
+            _logger.LogInformation("Initiating TikTok direct post for '{Title}'.", videoDetails.Title);
 
-        public Task<HashSet<string>> GetUploadedVideoTitlesAsync(CancellationToken cancellationToken = default)
-        {
-            _logger.LogWarning("Fetching uploaded video titles from TikTok is not yet implemented.");
-            return Task.FromResult(new HashSet<string>());
+            var initRequest = new PostPublishVideoInitRequest()
+            {
+                AccessToken = _tokenData.AccessToken,
+                PostInfo = new PostPublishVideoInitRequest.Types.PostInfo() { Title = videoDetails.Title },
+                SourceInfo = new PostPublishVideoInitRequest.Types.SourceInfo() { Source = "FILE_UPLOAD" }
+            };
+
+            var initResponse = await client.ExecutePostPublishVideoInitAsync(initRequest, cancellationToken);
+
+            if (!initResponse.IsSuccessful() || string.IsNullOrEmpty(initResponse.Data?.UploadUrl))
+            {
+                throw new ApiException($"TikTok Error: Failed to initialize video upload. Description: {initResponse.ErrorDescription}");
+            }
+
+            _logger.LogInformation("TikTok upload initialized. Uploading video file to the provided URL...");
+
+            byte[] videoBytes = await File.ReadAllBytesAsync(videoPath, cancellationToken);
+
+            var httpResponseMessage = await new Flurl.Url(initResponse.Data.UploadUrl)
+                .WithHeader("Content-Type", "video/mp4")
+                .PutAsync(new ByteArrayContent(videoBytes), cancellationToken: cancellationToken);
+
+            if (httpResponseMessage.StatusCode < 200 || httpResponseMessage.StatusCode >= 300)
+            {
+                throw new ApiException($"Failed to upload video file to TikTok. Status: {httpResponseMessage.StatusCode}");
+            }
+
+            _logger.LogInformation("Video file successfully uploaded. TikTok will process it asynchronously. Publish ID: {PublishId}", initResponse.Data.PublishId);
         }
 
         public Task SignOutAsync()
         {
-            _accessToken = null;
-            _refreshToken = null;
-            _logger.LogInformation("Signed out from TikTok. Access token has been cleared.");
+            if (File.Exists(_tokenStorePath))
+            {
+                File.Delete(_tokenStorePath);
+                _logger.LogInformation("TikTok token file deleted.");
+            }
+            _tokenData = null;
             return Task.CompletedTask;
         }
 
-        public async Task UploadVideoAsync(string videoPath, VideoDetails videoDetails, string? thumbnailPath, CancellationToken cancellationToken = default)
+        public Task<bool> DoesVideoExistAsync(string title, CancellationToken cancellationToken)
         {
-            if (string.IsNullOrEmpty(_accessToken))
-            {
-                throw new InvalidOperationException("Cannot upload to TikTok: Not authenticated.");
-            }
-
-            _logger.LogInformation("Creating TikTok upload service instance.");
-            var tikTokUploader = _tikTokServiceFactory.Create(_accessToken);
-
-            // CORRECTED: Pass the entire videoDetails object instead of just the title.
-            await tikTokUploader.UploadVideoAsync(videoPath, videoDetails, cancellationToken);
-            _logger.LogInformation("Successfully initiated upload process for video '{Title}' to TikTok.", videoDetails.Title);
+            _logger.LogWarning("Checking for existing video by title is not supported by the TikTok API. Returning false.");
+            return Task.FromResult(false);
         }
+
+        public Task<HashSet<string>> GetUploadedVideoTitlesAsync(CancellationToken cancellationToken)
+        {
+            _logger.LogWarning("Fetching uploaded video titles is not supported by the TikTok API. Returning an empty set.");
+            return Task.FromResult(new HashSet<string>());
+        }
+
+        #region Private Helpers
+
+        // --- NEW METHOD ---
+        /// <summary>
+        /// Starts a local HTTP listener to automatically capture the OAuth callback.
+        /// </summary>
+        private async Task<HttpListenerContext> ListenForCallbackAsync(string redirectUrl, CancellationToken cancellationToken)
+        {
+            HttpListener? listener = null;
+            try
+            {
+                listener = new HttpListener();
+                listener.Prefixes.Add(redirectUrl);
+                listener.Start();
+
+                // Asynchronously wait for one incoming request
+                var context = await listener.GetContextAsync().WaitAsync(cancellationToken);
+
+                // Send a response back to the browser to show a success message
+                var response = context.Response;
+                string responseString = "<html><body style='font-family: sans-serif;'><h1>Authentication successful!</h1><p>You can close this browser window now.</p></body></html>";
+                byte[] buffer = Encoding.UTF8.GetBytes(responseString);
+                response.ContentLength64 = buffer.Length;
+                var output = response.OutputStream;
+                await output.WriteAsync(buffer, 0, buffer.Length, cancellationToken);
+                output.Close();
+
+                return context;
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWarning("Authentication was cancelled by the user.");
+                throw;
+            }
+            finally
+            {
+                listener?.Stop();
+            }
+        }
+
+        private void SaveToken()
+        {
+            var json = JsonConvert.SerializeObject(_tokenData);
+            File.WriteAllText(_tokenStorePath, json);
+        }
+
+        private void LoadToken()
+        {
+            if (File.Exists(_tokenStorePath))
+            {
+                var json = File.ReadAllText(_tokenStorePath);
+                _tokenData = JsonConvert.DeserializeObject<TikTokTokenData>(json);
+            }
+        }
+
+        // --- REMOVED: This method is no longer needed ---
+        // private string? ShowUrlInputDialog() { ... }
+
+        private string GenerateCodeVerifier()
+        {
+            var randomBytes = new byte[32];
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(randomBytes);
+            }
+            return Convert.ToBase64String(randomBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        }
+
+        private string GenerateCodeChallenge(string codeVerifier)
+        {
+            using (var sha256 = SHA256.Create())
+            {
+                var challengeBytes = sha256.ComputeHash(Encoding.ASCII.GetBytes(codeVerifier));
+                return Convert.ToBase64String(challengeBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            }
+        }
+        #endregion
     }
 }

@@ -390,11 +390,25 @@
                 </ScrollViewer>
             </TabItem>
 
-            <TabItem Header="TikTok" Visibility="Collapsed">
+            <TabItem Header="TikTok" Visibility="Visible">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
                     <StackPanel DataContext="{Binding Settings}">
                         <GroupBox Header="TikTok API Settings" Padding="10" Margin="0,0,0,10">
-                            <Grid>
+                            <Grid DataContext="{Binding TikTok}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="180" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <Label Grid.Row="0" Grid.Column="0" Content="Client Key:" />
+                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding ClientKey, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <Label Grid.Row="1" Grid.Column="0" Content="Client Secret:" />
+                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding ClientSecret, UpdateSourceTrigger=PropertyChanged}" />
                             </Grid>
                         </GroupBox>
                     </StackPanel>
