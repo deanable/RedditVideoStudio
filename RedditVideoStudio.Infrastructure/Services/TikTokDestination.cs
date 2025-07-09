@@ -5,10 +5,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Diagnostics;
 using System.Web;
+using System.Windows.Forms;
+using System.Drawing;
 using System.Security.Cryptography;
 using System.Text;
 using System.Collections.Generic;
-using System.Net; // Added for HttpListener
+using System.Net;
 
 // Third-party using statements
 using Microsoft.Extensions.Logging;
@@ -24,9 +26,6 @@ using RedditVideoStudio.Core.Exceptions;
 
 namespace RedditVideoStudio.Infrastructure.Services
 {
-    /// <summary>
-    /// Implements the IVideoDestination for TikTok, using the TikTok Global v2 SDK.
-    /// </summary>
     public class TikTokDestination : IVideoDestination
     {
         private readonly ILogger<TikTokDestination> _logger;
@@ -34,7 +33,6 @@ namespace RedditVideoStudio.Infrastructure.Services
         private readonly string _tokenStorePath;
         private TikTokTokenData? _tokenData;
 
-        // Private class for deserializing the token response
         private class TikTokApiTokenResponse
         {
             [JsonProperty("access_token")]
@@ -47,7 +45,6 @@ namespace RedditVideoStudio.Infrastructure.Services
             public int ExpiresIn { get; set; }
         }
 
-        // Private class for storing token data persistently
         private class TikTokTokenData
         {
             public string AccessToken { get; set; } = string.Empty;
@@ -90,24 +87,17 @@ namespace RedditVideoStudio.Infrastructure.Services
                           $"&code_challenge={codeChallenge}" +
                           "&code_challenge_method=S256";
 
-            // --- START OF CORRECTION: Automated Listener Flow ---
-
-            // Start the local listener before opening the browser
             Task<HttpListenerContext> listenerContextTask = ListenForCallbackAsync(redirectUrl, cancellationToken);
             _logger.LogInformation("HTTP listener started at {Url}. Opening browser for user authentication...", redirectUrl);
 
             Process.Start(new ProcessStartInfo(authUrl) { UseShellExecute = true });
 
-            // Wait for the browser to redirect back to our listener
             HttpListenerContext context = await listenerContextTask;
             _logger.LogInformation("Callback received from browser.");
 
-            // Extract the query parameters from the callback URL
             var queryParams = context.Request.QueryString;
             string? authCode = queryParams.Get("code");
             string? incomingState = queryParams.Get("state");
-
-            // --- END OF CORRECTION ---
 
             if (string.IsNullOrEmpty(authCode) || incomingState != state)
             {
@@ -145,7 +135,6 @@ namespace RedditVideoStudio.Infrastructure.Services
             _logger.LogInformation("Successfully authenticated with TikTok and saved token.");
         }
 
-        // Other methods like UploadVideoAsync, SignOutAsync remain the same...
         public async Task UploadVideoAsync(string videoPath, VideoDetails videoDetails, string? thumbnailPath, CancellationToken cancellationToken = default)
         {
             if (!IsAuthenticated || _tokenData == null)
@@ -164,12 +153,26 @@ namespace RedditVideoStudio.Infrastructure.Services
 
             _logger.LogInformation("Initiating TikTok direct post for '{Title}'.", videoDetails.Title);
 
+            // --- START OF CORRECTION ---
+            // The request body must be fully populated with all required information, including
+            // PostInfo and SourceInfo, not just the access token.
             var initRequest = new PostPublishVideoInitRequest()
             {
                 AccessToken = _tokenData.AccessToken,
-                PostInfo = new PostPublishVideoInitRequest.Types.PostInfo() { Title = videoDetails.Title },
-                SourceInfo = new PostPublishVideoInitRequest.Types.SourceInfo() { Source = "FILE_UPLOAD" }
+                PostInfo = new PostPublishVideoInitRequest.Types.PostInfo()
+                {
+                    Title = videoDetails.Title,
+                    PrivacyLevel = "PRIVATE_TO_SELF" // Example: Set privacy level
+                },
+                SourceInfo = new PostPublishVideoInitRequest.Types.SourceInfo()
+                {
+                    Source = "FILE_UPLOAD",
+                    VideoSize = new FileInfo(videoPath).Length,
+                    ChunkSize = 5242880, // 5MB chunk size, as an example
+                    TotalChunkCount = (int)Math.Ceiling((double)new FileInfo(videoPath).Length / 5242880)
+                }
             };
+            // --- END OF CORRECTION ---
 
             var initResponse = await client.ExecutePostPublishVideoInitAsync(initRequest, cancellationToken);
 
@@ -218,11 +221,6 @@ namespace RedditVideoStudio.Infrastructure.Services
         }
 
         #region Private Helpers
-
-        // --- NEW METHOD ---
-        /// <summary>
-        /// Starts a local HTTP listener to automatically capture the OAuth callback.
-        /// </summary>
         private async Task<HttpListenerContext> ListenForCallbackAsync(string redirectUrl, CancellationToken cancellationToken)
         {
             HttpListener? listener = null;
@@ -232,10 +230,8 @@ namespace RedditVideoStudio.Infrastructure.Services
                 listener.Prefixes.Add(redirectUrl);
                 listener.Start();
 
-                // Asynchronously wait for one incoming request
                 var context = await listener.GetContextAsync().WaitAsync(cancellationToken);
 
-                // Send a response back to the browser to show a success message
                 var response = context.Response;
                 string responseString = "<html><body style='font-family: sans-serif;'><h1>Authentication successful!</h1><p>You can close this browser window now.</p></body></html>";
                 byte[] buffer = Encoding.UTF8.GetBytes(responseString);
@@ -271,9 +267,6 @@ namespace RedditVideoStudio.Infrastructure.Services
                 _tokenData = JsonConvert.DeserializeObject<TikTokTokenData>(json);
             }
         }
-
-        // --- REMOVED: This method is no longer needed ---
-        // private string? ShowUrlInputDialog() { ... }
 
         private string GenerateCodeVerifier()
         {
