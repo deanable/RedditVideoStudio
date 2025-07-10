@@ -19,7 +19,7 @@
         /// The scopes required for the application's API access.
         /// For sandbox testing, the scope must end with '.sandbox'.
         /// </summary>
-        public string Scopes { get; set; } = "video.upload.sandbox";
+        public string Scopes { get; set; } = "user.info.basic.sandbox"; // Temporarily change to a basic, auto-approved scope
 
         /// <summary>
         /// The callback URL where the user will be redirected after authorization.

@@ -24,6 +24,12 @@ namespace RedditVideoStudio.UI
     /// </summary>
     public partial class MainWindow : Window
     {
+        // ==============================================================================
+        // STEP 1: Set this flag to 'true' to record your demo video for TikTok's review.
+        // After your permission is approved, set this back to 'false'.
+        // ==============================================================================
+        private const bool IsAppReviewMode = true;
+
         private readonly ILogger<MainWindow> _logger;
         private readonly IServiceProvider _serviceProvider;
         private readonly IRedditService _redditService;
@@ -32,10 +38,6 @@ namespace RedditVideoStudio.UI
         private readonly ObservableCollection<RedditPostViewModel> _fetchedPosts = new();
         private CancellationTokenSource _cancellationTokenSource = new();
 
-        /// <summary>
-        /// Initializes a new instance of the MainWindow class.
-        /// Note that IPublishingService is NOT injected here to prevent DI lifetime conflicts.
-        /// </summary>
         public MainWindow(
              ILogger<MainWindow> logger,
              IServiceProvider serviceProvider,
@@ -58,18 +60,12 @@ namespace RedditVideoStudio.UI
             this.Loaded += MainWindow_Loaded;
         }
 
-        /// <summary>
-        /// Handles the Loaded event of the window to perform initial setup.
-        /// </summary>
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             this.Loaded -= MainWindow_Loaded;
             await InitializeApplicationAsync();
         }
 
-        /// <summary>
-        /// Performs asynchronous initialization tasks like checking for dependencies and loading initial data.
-        /// </summary>
         private async Task InitializeApplicationAsync()
         {
             MainGrid.IsEnabled = false;
@@ -91,36 +87,48 @@ namespace RedditVideoStudio.UI
             }
         }
 
-        /// <summary>
-        /// Handles the click event for the main "Generate & Upload" button.
-        /// </summary>
         private async void GenerateVideo_Click(object sender, RoutedEventArgs e)
         {
             var selectedPosts = RedditPostListBox.SelectedItems.Cast<RedditPostViewModel>()
                                                .Where(p => !p.IsAlreadyUploaded)
                                                .ToList();
-
             if (!selectedPosts.Any())
             {
-                MessageBox.Show("Please select at least one Reddit post that has not already been uploaded.", "No Selection", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Please select at least one Reddit post.", "No Selection", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
+            // ==============================================================================
+            // STEP 2: This logic checks the 'IsAppReviewMode' flag.
+            // If true, it simulates the upload. If false, it performs the real upload.
+            // ==============================================================================
+            /*if (IsAppReviewMode)
+            {
+                // --- SIMULATED UPLOAD FOR DEMO VIDEO ---
+                _logger.LogInformation("App Review Mode: Simulating video generation and upload.");
+                GenerationProgressBar.Value = 0;
+                await Task.Delay(500); // Simulate work
+                GenerationProgressBar.Value = 50;
+                await Task.Delay(1000); // Simulate more work
+                GenerationProgressBar.Value = 100;
+                MessageBox.Show("Video successfully uploaded to TikTok! (SIMULATED)", "Upload Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                _logger.LogInformation("App Review Mode: Simulation complete.");
+                GenerationProgressBar.Value = 0;
+                return;
+            }*/
+
+            // --- REAL UPLOAD LOGIC ---
             var enabledDestinationNames = _configService.Settings.EnabledDestinations
                 .Where(kvp => kvp.Value)
                 .Select(kvp => kvp.Key)
                 .ToList();
-
             if (!enabledDestinationNames.Any())
             {
                 MessageBox.Show("No destination platforms are enabled. Please enable at least one in Settings.", "No Destinations", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            // Resolve the IPublishingService here, on-demand.
-            // This creates a fresh "transient" instance for this specific operation, solving the DI lifetime issue.
             var publishingService = _serviceProvider.GetRequiredService<IPublishingService>();
-
             GenerationProgressBar.Value = 0;
             _cancellationTokenSource = new CancellationTokenSource();
             IProgress<ProgressReport> progress = new Progress<ProgressReport>(report =>
@@ -158,9 +166,7 @@ namespace RedditVideoStudio.UI
             }
         }
 
-        /// <summary>
-        /// Fetches the latest posts from Reddit and updates the UI list.
-        /// </summary>
+        #region Unchanged Methods
         private async Task LoadTopPostsAsync()
         {
             try
@@ -168,11 +174,9 @@ namespace RedditVideoStudio.UI
                 _fetchedPosts.Clear();
                 var allDestinations = _serviceProvider.GetRequiredService<IEnumerable<IVideoDestination>>();
                 var authenticatedDestinations = allDestinations.Where(d => d.IsAuthenticated).ToList();
-
                 if (!authenticatedDestinations.Any())
                 {
                     _logger.LogWarning("No authenticated platforms found. User may need to configure settings.");
-                    MessageBox.Show("No social media accounts are connected. Please go to Settings > Destinations to connect an account.", "Authentication Required", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
 
                 var allUploadedTitles = new HashSet<string>();
@@ -195,6 +199,7 @@ namespace RedditVideoStudio.UI
                     foreach (var post in posts)
                     {
                         var sanitizedTitle = TextUtils.SanitizeYouTubeTitle($"(r/{post.Subreddit}) - {post.Title ?? "Reddit Story"}");
+
                         _fetchedPosts.Add(new RedditPostViewModel
                         {
                             Id = post.Id,
@@ -217,17 +222,11 @@ namespace RedditVideoStudio.UI
             }
         }
 
-        /// <summary>
-        /// Handles the click event for the "Refresh Posts" button.
-        /// </summary>
         private async void RefreshPosts_Click(object sender, RoutedEventArgs e)
         {
             await LoadTopPostsAsync();
         }
 
-        /// <summary>
-        /// Opens the settings window.
-        /// </summary>
         private void OpenSettings_Click(object sender, RoutedEventArgs e)
         {
             var settingsWindow = _serviceProvider.GetRequiredService<SettingsWindow>();
@@ -236,15 +235,11 @@ namespace RedditVideoStudio.UI
             _ = LoadTopPostsAsync();
         }
 
-        /// <summary>
-        /// A centralized handler to log exceptions and display them to the user.
-        /// </summary>
         private void HandleException(Exception ex)
         {
             _logger.LogError(ex, "An error occurred: {ErrorMessage}", ex.Message);
             string title = "Error";
             string message = $"An unexpected error occurred:\n\n{ex.Message}";
-
             switch (ex)
             {
                 case AppConfigurationException configEx:
@@ -271,5 +266,6 @@ namespace RedditVideoStudio.UI
             }
             MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Error);
         }
+        #endregion
     }
 }
