@@ -10,6 +10,7 @@
   <ItemGroup>
     <PackageReference Include="Flurl" Version="4.0.0" />
     <PackageReference Include="Flurl.Http" Version="4.0.2" />
+    <PackageReference Include="SKIT.FlurlHttpClient.ByteDance.TikTokGlobal" Version="3.2.0" />
     <PackageReference Include="Google.Apis.YouTube.v3" Version="1.69.0.3764" />
     <PackageReference Include="Google.Cloud.TextToSpeech.V1" Version="3.12.0" />
     <PackageReference Include="Microsoft.CognitiveServices.Speech" Version="1.44.0" />
